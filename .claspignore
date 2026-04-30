@@ -1,0 +1,8 @@
+**/node_modules/**
+package.json
+package-lock.json
+build-tailwind.js
+input.css
+*.md
+.git/
+.gitignore
