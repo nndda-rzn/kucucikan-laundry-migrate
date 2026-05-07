@@ -12,9 +12,6 @@
   let editingCustomerId = null;
   let currentPaketFilter = "Semua";
   let historyRenderLimit = 30;
-  let allPromos = [];
-  let editingPromoId = null;
-  let appliedPromo = null;
   let isSubmitting = false; // [P0] Double-submit prevention
   let transactionsCacheTime = 0; // [P1] Client-side transaction cache
   const TRX_CACHE_TTL = 60000; // 1 menit TTL
@@ -465,7 +462,7 @@
         if (btn) { btn.disabled = false; btn.innerHTML = origHtml; }
         showToast("Gagal simpan pengaturan: " + err.message, "error");
       })
-      .saveSettingsConfig(newData);
+      .saveSettingsConfig(currentUser.token, newData);
   }
 
   // [P3] Tandai settings berubah saat ada input
@@ -511,13 +508,10 @@
       document
         .getElementById("adminSettingsDesktop")
         .classList.toggle("hidden", !isAdmin);
-      document
-        .getElementById("adminPromoDesktop")
-        .classList.toggle("hidden", !isAdmin);
+      // FITUR PROMO TELAH DIHAPUS
 
       showSection("overview");
       fetchCustomers();
-      fetchPromos();
 
       // [OPT] Auto-refresh dashboard setiap 1 menit (multi-kasir sync)
       if (autoRefreshInterval) clearInterval(autoRefreshInterval);
@@ -585,7 +579,7 @@
         btnSpinner.classList.add("hidden");
 
         if (res && res.success) {
-          currentUser = { role: res.role, nama: res.nama };
+          currentUser = { role: res.role, nama: res.nama, token: res.token };
           const expiry = new Date().getTime() + 6 * 60 * 60 * 1000;
           localStorage.setItem(
             "l_premium_session_v3",
@@ -763,7 +757,6 @@
         laporan: "adminLaporanDesktop",
         paket: "adminMenuDesktop",
         settings: "adminSettingsDesktop",
-        promo: "adminPromoDesktop",
       };
       const adminBtnId = adminMap[name];
       if (adminBtnId) {
@@ -826,7 +819,7 @@
       setTimeout(previewWaTemplate, 50);
       setTimeout(previewSetLogo, 50);
     }
-    if (name === "promo") fetchPromos();
+
   }
 
   function previewSetLogo() {
@@ -908,8 +901,6 @@
       performDeletePaket(deleteTargetId);
     } else if (deleteTargetType === "customer") {
       performDeleteCustomer(deleteTargetId);
-    } else if (deleteTargetType === "promo") {
-      performDeletePromo(deleteTargetId);
     } else if (deleteTargetType === "transaction") {
       performDeleteTransaction(deleteTargetId);
     }
@@ -1155,7 +1146,7 @@
           btn.innerHTML = origHtml;
           showToast("Gagal: " + err.message, "error");
         })
-        .updateCustomerData(editingCustomerId, n, w);
+        .updateCustomerData(currentUser.token, editingCustomerId, n, w);
     } else {
       google.script.run
         .withSuccessHandler((res) => {
@@ -1172,7 +1163,7 @@
           btn.innerHTML = origHtml;
           showToast("Gagal: " + err.message, "error");
         })
-        .addCustomerData(n, w);
+        .addCustomerData(currentUser.token, n, w);
     }
   }
 
@@ -1193,7 +1184,7 @@
       .withFailureHandler((err) => {
         showToast("Gagal hapus pelanggan: " + err.message, "error");
       })
-      .deleteCustomerData(id);
+      .deleteCustomerData(currentUser.token, id);
   }
 
   // 8. DASHBOARD & HISTORY
@@ -1866,7 +1857,7 @@
         showLoading(false);
         showToast("Gagal simpan pelunasan: " + err.message, "error");
       })
-      .lunasDanAmbil(pendingPelunasanId, m);
+      .lunasDanAmbil(currentUser.token, pendingPelunasanId, m);
   }
   function toggleModalPayView() {
     const method = document.getElementById("modalPayMethod").value;
@@ -2120,10 +2111,10 @@ Terima kasih.`;
         if (oldStatus) selectElement.value = oldStatus;
         showToast("Gagal update status: " + err.message, "error");
       })
-      .updateTransactionStatus(transactionId, newStatus);
+      .updateTransactionStatus(currentUser.token, transactionId, newStatus);
   }
 
-  // 9. LOGIKA PEMBAYARAN & PROMO SAAT TRANSAKSI BARU
+  // 9. LOGIKA PEMBAYARAN SAAT TRANSAKSI BARU
   function toggleDPView() {
     const isChecked = document.getElementById("checkDP").checked;
     const dpInput = document.getElementById("dpInputContainer");
@@ -2156,67 +2147,6 @@ Terima kasih.`;
     }
   }
 
-  function applyPromoCode() {
-    const codeInput = document
-      .getElementById("inputPromoCode")
-      .value.toUpperCase()
-      .trim();
-    if (!codeInput) return;
-
-    const s = document.getElementById("selectPaket");
-    const opt = s.options[s.selectedIndex];
-    if (!opt || opt.value === "") {
-      showToast("Pilih layanan & isi berat dulu!", "error");
-      return;
-    }
-
-    const h = opt.getAttribute("data-harga");
-    const b = document.getElementById("berat").value || 0;
-    const subtotal = h * b;
-
-    const p = allPromos.find((x) => x.kode_promo === codeInput);
-    if (!p) {
-      showToast("Kode Promo tidak ditemukan!", "error");
-      return;
-    }
-
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const expDate = new Date(p.berlaku_hingga);
-    expDate.setHours(23, 59, 59, 999);
-
-    if (p.status !== "Aktif") {
-      showToast("Promo sudah tidak aktif!", "error");
-      return;
-    }
-    if (today > expDate) {
-      showToast("Promo sudah kedaluwarsa!", "error");
-      return;
-    }
-    if (subtotal < p.min_transaksi) {
-      showToast(
-        `Minimal belanja Rp ${p.min_transaksi.toLocaleString("id-ID")} untuk promo ini.`,
-        "error",
-      );
-      return;
-    }
-
-    appliedPromo = p;
-    document.getElementById("promoMessageContainer").classList.remove("hidden");
-    document.getElementById("promoMessageContainer").classList.add("flex");
-    document.getElementById("promoMessage").innerText =
-      `Promo ${p.kode_promo} aktif!`;
-    calculateTotal();
-    showToast("Promo berhasil diterapkan!");
-  }
-
-  function removePromoCode() {
-    appliedPromo = null;
-    document.getElementById("inputPromoCode").value = "";
-    document.getElementById("promoMessageContainer").classList.add("hidden");
-    document.getElementById("promoMessageContainer").classList.remove("flex");
-    calculateTotal();
-  }
 
   function handlePaketChange() {
     const s = document.getElementById("selectPaket");
@@ -2236,11 +2166,6 @@ Terima kasih.`;
     const hint = document.getElementById("hintEstimasi");
     hint.innerText = `Estimasi Selesai: ${strEst}`;
     hint.classList.remove("hidden");
-
-    if (appliedPromo) {
-      removePromoCode();
-      showToast("Layanan diubah. Promo direset.", "warning");
-    }
     calculateTotal();
   }
 
@@ -2288,8 +2213,10 @@ Terima kasih.`;
     const h = parseInt(opt.getAttribute("data-harga")) || 0;
     const sat = opt.getAttribute("data-satuan") || "Kg";
     const dur = parseInt(opt.getAttribute("data-durasi")) || 0;
+    const pId = opt.getAttribute("data-id") || "";
 
     currentCart.push({
+      id: pId,
       paket: pkt,
       berat: b,
       satuan: sat,
@@ -2344,31 +2271,11 @@ Terima kasih.`;
     currentCart.forEach((item) => {
       subtotal += item.subtotal;
     });
-    let diskon = 0;
-
-    if (appliedPromo) {
-      if (subtotal >= appliedPromo.min_transaksi) {
-        if (appliedPromo.tipe_diskon === "Persen")
-          diskon = subtotal * (appliedPromo.nilai_diskon / 100);
-        else diskon = appliedPromo.nilai_diskon;
-        if (diskon > subtotal) diskon = subtotal;
-      } else {
-        removePromoCode();
-        showToast(
-          `Promo dilepas. Minimal Rp ${appliedPromo.min_transaksi.toLocaleString("id-ID")}`,
-          "error",
-        );
-      }
-    }
-
-    let total = subtotal - diskon;
 
     document.getElementById("textSubtotal").innerText =
       subtotal.toLocaleString("id-ID");
-    document.getElementById("textDiskon").innerText =
-      diskon.toLocaleString("id-ID");
     document.getElementById("totalHarga").innerText =
-      total.toLocaleString("id-ID");
+      subtotal.toLocaleString("id-ID");
     calcKembalian();
   }
 
@@ -2412,7 +2319,6 @@ Terima kasih.`;
     document.getElementById("berat").value = "";
     document.getElementById("selectPaket").selectedIndex = 0;
     document.getElementById("textSubtotal").innerText = "0";
-    document.getElementById("textDiskon").innerText = "0";
     document.getElementById("totalHarga").innerText = "0";
     document.getElementById("hintEstimasi").classList.add("hidden");
     document.getElementById("inputUang").value = "";
@@ -2426,7 +2332,6 @@ Terima kasih.`;
     document.getElementById("inputDP").value = "";
     currentCart = [];
     renderCart();
-    removePromoCode();
     togglePayView();
     clearDraft(); // [OPT] Hapus draft setelah reset
   }
@@ -2530,7 +2435,6 @@ Terima kasih.`;
       metode_pembayaran: method,
       status_pembayaran: statusPay,
       kasir: currentUser.nama,
-      kode_promo: appliedPromo ? appliedPromo.kode_promo : "",
       catatan: catatan,
       terbayar: terbayar,
     };
@@ -2538,7 +2442,6 @@ Terima kasih.`;
 
     // Build confirm summary
     const subtotal = document.getElementById("textSubtotal").innerText;
-    const diskon = document.getElementById("textDiskon").innerText;
     let summaryHtml = `
             <div class="flex justify-between items-center py-3 px-4 border-b border-slate-100"><span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Pelanggan</span><span class="text-sm font-bold text-slate-800">${escapeHTML(cName)}</span></div>
             <div class="flex justify-between items-center py-3 px-4 border-b border-slate-100"><span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">WhatsApp</span><span class="text-sm font-bold text-slate-800">${escapeHTML(wa) || "-"}</span></div>
@@ -2549,12 +2452,7 @@ Terima kasih.`;
     });
 
     summaryHtml += `</div>`;
-    if (appliedPromo) {
-      summaryHtml += `<div class="flex justify-between items-center py-3 px-4 border-b border-slate-100"><span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Promo</span><span class="text-sm font-bold text-emerald-600">${escapeHTML(appliedPromo.kode_promo)}</span></div>`;
-    }
     summaryHtml += `
-            <div class="flex justify-between items-center py-3 px-4 border-b border-slate-100"><span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Subtotal</span><span class="text-sm font-bold text-slate-800">Rp ${subtotal}</span></div>
-            <div class="flex justify-between items-center py-3 px-4 border-b border-slate-100"><span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Diskon</span><span class="text-sm font-bold text-emerald-600">-Rp ${diskon}</span></div>
             <div class="flex justify-between items-center py-4 px-4 bg-blue-600 text-white"><span class="text-[10px] font-black uppercase tracking-widest">Total Bayar</span><span class="text-xl font-black">Rp ${rawTotal.replace(/\B(?=(\d{3})+(?!\d))/g, ".")}</span></div>`;
 
     if (terbayar > 0 && terbayar < parseInt(rawTotal)) {
@@ -2613,9 +2511,7 @@ Terima kasih.`;
             id: res.id,
             tanggal: res.tanggal,
             total: res.total,
-            diskon: res.diskon,
             subtotal: res.subtotal,
-            appliedPromo: res.appliedPromo,
             status_pembayaran: res.status_pembayaran || d.status_pembayaran,
           };
           resetFormTransaksi();
@@ -2636,7 +2532,7 @@ Terima kasih.`;
         showLoading(false);
         showToast("Koneksi gagal, silakan coba lagi.", "error");
       })
-      .createTransaction(d);
+      .createTransaction(currentUser.token, d);
     pendingTxData = null;
     pendingTxExtra = null;
   }
@@ -2732,18 +2628,9 @@ Terima kasih.`;
       catatanWrap.classList.add("hidden");
     }
 
-    // Detail Promo di Nota
+    // Subtotal di Nota
     document.getElementById("notaSubtotal").innerText =
       "Rp " + subtotalReal.toLocaleString("id-ID");
-    if (lastTransactionData.diskon && lastTransactionData.diskon > 0) {
-      document.getElementById("notaPromoName").innerText =
-        "Diskon (" + escapeHTML(lastTransactionData.appliedPromo) + ")";
-      document.getElementById("notaDiskon").innerText =
-        "-Rp " + parseInt(lastTransactionData.diskon).toLocaleString("id-ID");
-    } else {
-      document.getElementById("notaPromoName").innerText = "Diskon";
-      document.getElementById("notaDiskon").innerText = "-Rp 0";
-    }
 
     const stBayar = document.getElementById("notaStatusBayar");
     stBayar.innerText =
@@ -2957,7 +2844,7 @@ Terima kasih.`;
       return;
     }
     let csvContent =
-      "ID Transaksi,Tanggal,Customer,Paket,Jumlah/Berat,Satuan,Total (Rp),Status,Metode Bayar,Status Bayar,Kasir,Kode Promo,Diskon\n";
+      "ID Transaksi,Tanggal,Customer,Paket,Jumlah/Berat,Satuan,Total (Rp),Status,Metode Bayar,Status Bayar,Kasir\n";
     for (let i = 0; i < currentReportData.length; i++) {
       const row = currentReportData[i];
       const d = new Date(row.tanggal);
@@ -2979,8 +2866,6 @@ Terima kasih.`;
               isFirst ? row.metode_pembayaran : "",
               isFirst ? row.status_pembayaran : "",
               isFirst ? '"' + row.kasir + '"' : "",
-              isFirst ? row.kode_promo || "-" : "",
-              isFirst ? row.diskon || 0 : "",
             ].join(",") + "\n";
         }
       } else {
@@ -2997,8 +2882,6 @@ Terima kasih.`;
             row.metode_pembayaran,
             row.status_pembayaran,
             '"' + row.kasir + '"',
-            row.kode_promo || "-",
-            row.diskon || 0,
           ].join(",") + "\n";
       }
     }
@@ -3280,7 +3163,7 @@ Terima kasih.`;
           const p = allPackages[i];
           if (p.status === "Nonaktif") continue;
           const safeSat = escapeHTML(p.satuan || "Kg");
-          selHtml += `<option value="${escapeHTML(p.nama)}" data-harga="${p.harga}" data-satuan="${safeSat}" data-durasi="${escapeHTML(p.durasi || 0)}">${escapeHTML(p.nama)} (Rp ${parseInt(p.harga).toLocaleString("id-ID")} / ${safeSat})</option>`;
+          selHtml += `<option value="${escapeHTML(p.nama)}" data-id="${escapeHTML(p.id)}" data-harga="${p.harga}" data-satuan="${safeSat}" data-durasi="${escapeHTML(p.durasi || 0)}">${escapeHTML(p.nama)} (Rp ${parseInt(p.harga).toLocaleString("id-ID")} / ${safeSat})</option>`;
         }
         sel.innerHTML = selHtml;
         renderPaketGrid(allPackages);
@@ -3465,7 +3348,7 @@ Terima kasih.`;
         showToast("Gagal ubah status layanan: " + err.message, "error");
         fetchPaket(); // rollback visual
       })
-      .updatePackageStatus(id, newStatus);
+      .updatePackageStatus(currentUser.token, id, newStatus);
   }
 
   function editPaket(id, nama, harga, satuan, durasi, kategori, status) {
@@ -3541,7 +3424,7 @@ Terima kasih.`;
           btnSave.innerHTML = origHtml;
           showToast("Gagal: " + err.message, "error");
         })
-        .updatePackage(editingPaketId, n, h, d, s, k, st);
+        .updatePackage(currentUser.token, editingPaketId, n, h, d, s, k, st);
     } else {
       google.script.run
         .withSuccessHandler(function (res) {
@@ -3560,7 +3443,7 @@ Terima kasih.`;
           btnSave.innerHTML = origHtml;
           showToast("Gagal: " + err.message, "error");
         })
-        .addPackage(n, h, d, s, k, st);
+        .addPackage(currentUser.token, n, h, d, s, k, st);
     }
   }
 
@@ -3581,227 +3464,9 @@ Terima kasih.`;
       .withFailureHandler(function (err) {
         showToast("Gagal hapus layanan: " + err.message, "error");
       })
-      .deletePackage(id);
+      .deletePackage(currentUser.token, id);
   }
 
-  // 13. LOGIKA MARKETING & PROMO (CRUD)
-  function fetchPromos() {
-    const cont = document.getElementById("listPromo");
-    if (cont) cont.innerHTML = '<div class="text-center py-8 text-slate-400 text-sm font-medium">Memuat data promo...</div>';
-    google.script.run
-      .withSuccessHandler(function (data) {
-        allPromos = data || [];
-        renderPromoGrid(allPromos);
-      })
-      .withFailureHandler(function (err) {
-        if (cont) cont.innerHTML = '<div class="text-center py-8 text-red-400 text-sm font-medium">Gagal memuat promo.</div>';
-        showToast("Gagal muat promo: " + err.message, "error");
-      })
-      .getPromos();
-  }
-
-  function renderPromoGrid(data) {
-    const cont = document.getElementById("listPromo");
-    if (!cont) return;
-    if (data.length === 0) {
-      cont.innerHTML = `<div class="text-center py-10 font-bold text-slate-400 text-sm">Belum ada promo.</div>`;
-      return;
-    }
-
-    let html = "";
-    for (let i = 0; i < data.length; i++) {
-      const p = data[i];
-      const d = new Date(p.berlaku_hingga);
-      const isExpired = d < new Date(new Date().setHours(0, 0, 0, 0));
-      const dateStr = isNaN(d)
-        ? "-"
-        : d.toLocaleDateString("id-ID", {
-            day: "numeric",
-            month: "short",
-            year: "numeric",
-          });
-      const isActive = p.status === "Aktif" && !isExpired;
-      const displayStatus = isExpired ? "KEDALUWARSA" : p.status.toUpperCase();
-
-      let nominalStr =
-        p.tipe_diskon === "Persen"
-          ? `${p.nilai_diskon}%`
-          : `Rp ${p.nilai_diskon.toLocaleString("id-ID")}`;
-      let discountBg = isActive
-        ? "bg-gradient-to-br from-violet-500 to-purple-600 text-white"
-        : "bg-slate-200 text-slate-500";
-
-      html += `
-                <div class="bg-white rounded-2xl border border-slate-100 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all flex flex-col md:flex-row md:items-stretch overflow-hidden group ${isActive ? "" : "opacity-60 grayscale-[40%]"}">
-                    
-                    <!-- KIRI: Discount Badge (Voucher Feel) -->
-                    <div class="${discountBg} w-full md:w-36 flex-shrink-0 flex flex-col items-center justify-center p-4 md:p-5 relative">
-                        <span class="text-2xl md:text-3xl font-black leading-none">${p.tipe_diskon === "Persen" ? p.nilai_diskon + "%" : "Rp"}</span>
-                        ${p.tipe_diskon !== "Persen" ? '<span class="text-sm md:text-base font-black leading-none mt-0.5">' + parseInt(p.nilai_diskon).toLocaleString("id-ID") + "</span>" : '<span class="text-[10px] font-bold uppercase tracking-widest mt-1 opacity-80">DISKON</span>'}
-                        <!-- Decorative circles for voucher look -->
-                        <div class="hidden md:block absolute -right-2.5 top-1/2 -translate-y-1/2 w-5 h-5 bg-slate-50 rounded-full border border-slate-100"></div>
-                    </div>
-
-                    <!-- TENGAH + KANAN: Info & Aksi -->
-                    <div class="flex-1 flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 md:p-5 md:pl-6">
-                        
-                        <!-- Info Utama -->
-                        <div class="flex-1 min-w-0">
-                            <div class="flex items-center flex-wrap gap-2 mb-1">
-                                <h5 class="font-black text-slate-900 text-base md:text-lg tracking-widest uppercase font-mono">${escapeHTML(p.kode_promo)}</h5>
-                                <span class="text-[9px] font-black px-2 py-0.5 rounded-full border ${isActive ? "bg-emerald-100 text-emerald-700 border-emerald-200" : "bg-red-100 text-red-600 border-red-200"}">${displayStatus}</span>
-                            </div>
-                            <div class="flex items-center gap-3 text-[10px] md:text-xs font-bold text-slate-500">
-                                <span class="flex items-center gap-1"><svg class="w-3 h-3 text-violet-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg> Min. Rp ${p.min_transaksi.toLocaleString("id-ID")}</span>
-                                <span class="text-slate-300">•</span>
-                                <span class="flex items-center gap-1"><svg class="w-3 h-3 text-violet-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg> s/d ${dateStr}</span>
-                            </div>
-                        </div>
-
-                        <!-- Divider (Desktop) -->
-                        <div class="w-px h-8 bg-slate-200 hidden md:block mx-1"></div>
-
-                        <!-- Aksi -->
-                        <div class="flex items-center gap-2 flex-shrink-0">
-                            <button onclick="editPromoUI('${escapeHTML(p.id)}')" class="text-slate-400 hover:text-amber-600 bg-slate-50 hover:bg-amber-50 p-2.5 rounded-lg transition-colors border border-slate-100 shadow-sm" title="Edit Promo"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg></button>
-                            <button onclick="deletePromoUI('${escapeHTML(p.id)}')" class="text-slate-400 hover:text-red-600 bg-slate-50 hover:bg-red-50 p-2.5 rounded-lg transition-colors border border-slate-100 shadow-sm" title="Hapus Promo"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button>
-                        </div>
-                    </div>
-                </div>`;
-    }
-    cont.innerHTML = html;
-  }
-
-  function editPromoUI(id) {
-    const p = allPromos.find((x) => x.id === id);
-    if (!p) return;
-    editingPromoId = id;
-    document.getElementById("promoKode").value = p.kode_promo;
-    document.getElementById("promoTipe").value = p.tipe_diskon;
-    document.getElementById("promoNilai").value = p.nilai_diskon;
-    document.getElementById("promoMin").value = p.min_transaksi;
-    document.getElementById("promoTanggal").value =
-      p.berlaku_hingga.split("T")[0];
-    document.getElementById("promoStatus").value = p.status;
-
-    document.getElementById("titlePromo").innerHTML =
-      '<div class="w-2 h-6 bg-amber-500 rounded-full"></div> Edit Promo';
-    document.getElementById("titlePromo").className =
-      "text-xl font-black mb-6 flex items-center gap-3 text-slate-900";
-    const btn = document.getElementById("btnSavePromo");
-    btn.innerHTML =
-      '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg> Update Promo';
-    btn.className =
-      "flex-[2] bg-amber-500 hover:bg-amber-600 text-white font-bold py-4 rounded-xl shadow-lg shadow-amber-500/20 transition-all active:scale-95 text-sm flex justify-center items-center gap-2";
-    document.getElementById("btnCancelPromo").classList.remove("hidden");
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  }
-
-  function cancelEditPromo() {
-    editingPromoId = null;
-    document.getElementById("promoKode").value = "";
-    document.getElementById("promoNilai").value = "";
-    document.getElementById("promoMin").value = "";
-    document.getElementById("promoTanggal").value = "";
-    document.getElementById("promoStatus").value = "Aktif";
-    document.getElementById("promoTipe").value = "Nominal";
-
-    document.getElementById("titlePromo").innerHTML =
-      '<div class="w-2 h-6 bg-violet-600 rounded-full"></div> Buat Promo';
-    document.getElementById("titlePromo").className =
-      "text-xl font-black mb-6 flex items-center gap-3 text-slate-900";
-    const btn = document.getElementById("btnSavePromo");
-    btn.innerHTML =
-      '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v13m0-13V6a2 2 0 112 2h-2zm0 0V5.5A2.5 2.5 0 109.5 8H12zm-7 4h14M5 12a2 2 0 110-4h14a2 2 0 110 4M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7"></path></svg> Simpan Promo';
-    btn.className =
-      "flex-[2] bg-violet-600 hover:bg-violet-700 text-white font-bold py-4 rounded-xl shadow-lg shadow-violet-600/20 transition-all active:scale-95 text-sm flex justify-center items-center gap-2";
-    document.getElementById("btnCancelPromo").classList.add("hidden");
-  }
-
-  function savePromo() {
-    const k = document.getElementById("promoKode").value.trim();
-    const t = document.getElementById("promoTipe").value;
-    const n = parseInt(document.getElementById("promoNilai").value) || 0;
-    const m = parseInt(document.getElementById("promoMin").value) || 0;
-    const tgl = document.getElementById("promoTanggal").value;
-    const st = document.getElementById("promoStatus").value;
-
-    if (!k || n <= 0 || !tgl) {
-      showToast("Kode, Nilai, dan Tanggal wajib diisi!", "error");
-      return;
-    }
-
-    const btn = document.getElementById("btnSavePromo");
-    const origHtml = btn.innerHTML;
-    btn.disabled = true;
-    btn.innerHTML = '<svg class="animate-spin w-5 h-5" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg> Menyimpan...';
-
-    if (editingPromoId) {
-      google.script.run
-        .withSuccessHandler((res) => {
-          btn.disabled = false;
-          btn.innerHTML = origHtml;
-          if (res.success) {
-            showToast("Promo diperbarui!");
-            cancelEditPromo();
-            fetchPromos();
-          } else {
-            showToast("Gagal update!", "error");
-          }
-        })
-        .withFailureHandler((err) => {
-          btn.disabled = false;
-          btn.innerHTML = origHtml;
-          showToast("Gagal: " + err.message, "error");
-        })
-        .updatePromo(
-          editingPromoId,
-          k,
-          t,
-          n,
-          m,
-          new Date(tgl).toISOString(),
-          st,
-        );
-    } else {
-      google.script.run
-        .withSuccessHandler((res) => {
-          btn.disabled = false;
-          btn.innerHTML = origHtml;
-          if (res.success) {
-            showToast("Promo disimpan!");
-            cancelEditPromo();
-            fetchPromos();
-          }
-        })
-        .withFailureHandler((err) => {
-          btn.disabled = false;
-          btn.innerHTML = origHtml;
-          showToast("Gagal: " + err.message, "error");
-        })
-        .addPromo(k, t, n, m, new Date(tgl).toISOString(), st);
-    }
-  }
-
-  function deletePromoUI(id) {
-    showDeleteModal("promo", id, "Hapus Promo?");
-  }
-  function performDeletePromo(id) {
-    google.script.run
-      .withSuccessHandler(function (res) {
-        if (res.success) {
-          showToast("Promo dihapus!");
-          if (editingPromoId === id) cancelEditPromo();
-          fetchPromos();
-        } else {
-          showToast("Gagal menghapus!", "error");
-        }
-      })
-      .withFailureHandler(function (err) {
-        showToast("Gagal hapus promo: " + err.message, "error");
-      })
-      .deletePromo(id);
-  }
 
   // 14. REPEAT ORDER (fixed: handle layanan nonaktif)
   function repeatOrder(txId) {
@@ -3871,7 +3536,7 @@ Terima kasih.`;
     }
     if (!hargaPerKg && tx.berat > 0) {
       hargaPerKg = Math.round(
-        (parseInt(tx.total) + parseInt(tx.diskon || 0)) / parseFloat(tx.berat),
+        parseInt(tx.total) / parseFloat(tx.berat),
       );
     }
     lastTransactionData = {
@@ -3888,9 +3553,7 @@ Terima kasih.`;
       status_pembayaran: tx.status_pembayaran,
       metode_pembayaran: tx.metode_pembayaran,
       hargaPerKg: hargaPerKg,
-      diskon: tx.diskon || 0,
-      subtotal: parseInt(tx.total) + parseInt(tx.diskon || 0),
-      appliedPromo: tx.kode_promo || "",
+      subtotal: parseInt(tx.total),
       catatan: tx.catatan || "",
       items: tx.items,
       terbayar: tx.terbayar || 0,
@@ -3915,7 +3578,7 @@ Terima kasih.`;
       .withFailureHandler(function (err) {
         showToast("Gagal hapus transaksi: " + err.message, "error");
       })
-      .deleteTransaction(id);
+      .deleteTransaction(currentUser.token, id);
   }
 
   // 17. KEYBOARD SHORTCUTS

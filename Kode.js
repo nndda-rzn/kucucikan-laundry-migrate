@@ -1,9 +1,8 @@
 /**
  * SISTEM MANAJEMEN LAUNDRY - SERVER SIDE
- * Termasuk Modul Marketing & Promo Code terintegrasi penuh.
  */
 
-const DB_ID = "1vB2S0g0UpXJEXA-TmKfuVjNL78NVQJeeCgBNdfXziA0";
+const DB_ID = "1D7m7mBUuPEVRLjRCQLY-MvRdYY-C3ldpS-mfPs0wQwU";
 
 function doGet() {
   const settings = getSettings();
@@ -141,7 +140,6 @@ function setupDatabase() {
     "transactions",
     "settings",
     "customers",
-    "promos",
   ];
   sheets.forEach((name) => {
     let sheet = ss.getSheetByName(name);
@@ -180,8 +178,6 @@ function setupDatabase() {
           "estimasi_selesai",
           "metode_pembayaran",
           "status_pembayaran",
-          "kode_promo",
-          "diskon",
           "catatan",
         ]);
       } else if (name === "settings") {
@@ -191,23 +187,14 @@ function setupDatabase() {
         sheet.appendRow(["nota_footer", "Terima kasih!"]);
       } else if (name === "customers") {
         sheet.appendRow(["id", "nama", "whatsapp", "terakhir_order"]);
-      } else if (name === "promos") {
-        sheet.appendRow([
-          "id",
-          "kode_promo",
-          "tipe_diskon",
-          "nilai_diskon",
-          "min_transaksi",
-          "berlaku_hingga",
-          "status",
-        ]);
       }
     } else if (name === "packages") {
       // Migration: tambah kolom kategori & status jika belum ada
       const lastCol = sheet.getLastColumn();
       const headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
       if (headers.indexOf("kategori") === -1) {
-        sheet.getRange(1, 6).setValue("kategori");
+        const sCol = sheet.getLastColumn() + 1;
+        sheet.getRange(1, sCol).setValue("kategori");
       }
       const hdrs2 = sheet
         .getRange(1, 1, 1, sheet.getLastColumn())
@@ -223,6 +210,15 @@ function setupDatabase() {
     }
   });
   return "Setup selesai.";
+}
+
+function validateSession_(token) {
+  if (!token) throw new Error("Akses ditolak: Token autentikasi tidak ditemukan.");
+  const cache = CacheService.getScriptCache();
+  const sessionData = cache.get(token);
+  if (!sessionData) throw new Error("Akses ditolak: Sesi telah berakhir atau tidak valid. Silakan login kembali.");
+  cache.put(token, sessionData, 28800);
+  return JSON.parse(sessionData);
 }
 
 function login(username, password) {
@@ -242,9 +238,7 @@ function login(username, password) {
     for (let i = 1; i < data.length; i++) {
       if (String(data[i][0]).trim() === username) {
         const dbPassword = String(data[i][1]).trim();
-        if (dbPassword === password) {
-          sheet.getRange(i + 1, 2).setValue(inputHash);
-        } else if (dbPassword !== inputHash) {
+        if (dbPassword !== inputHash) {
           cache.put(
             attemptKey,
             (attempts ? parseInt(attempts) + 1 : 1).toString(),
@@ -253,7 +247,10 @@ function login(username, password) {
           return { success: false, message: "Username atau password salah!" };
         }
         cache.remove(attemptKey);
-        return { success: true, role: data[i][2], nama: data[i][3] };
+        const token = Utilities.getUuid();
+        const sessionData = JSON.stringify({ username: username, role: data[i][2], nama: data[i][3] });
+        CacheService.getScriptCache().put(token, sessionData, 28800);
+        return { success: true, role: data[i][2], nama: data[i][3], token: token };
       }
     }
     cache.put(
@@ -318,8 +315,6 @@ function getTransactions() {
       estimasi: parseSafeDate(r[10]),
       metode_pembayaran: String(r[11] || "Tunai"),
       status_pembayaran: String(r[12] || "Belum Lunas"),
-      kode_promo: String(r[13] || ""),
-      diskon: parseInt(r[14]) || 0,
       catatan: String(r[15] || ""),
       terbayar:
         r[16] !== undefined && r[16] !== ""
@@ -340,7 +335,7 @@ function getTransactions() {
               paket: String(r[3] || "Layanan"),
               berat: parseFloat(r[4]) || 0,
               satuan: String(r[9] || "Kg"),
-              subtotal: (parseInt(r[5]) || 0) + (parseInt(r[14]) || 0),
+              subtotal: parseInt(r[5]) || 0,
             },
           ],
       tanggal_pelunasan: (r[18] && String(r[18]).trim() !== "") ? parseSafeDate(r[18]) : "",
@@ -353,7 +348,8 @@ function getTransactions() {
   }
 }
 
-function createTransaction(data) {
+function createTransaction(token, data) {
+  validateSession_(token);
   if (!data || !data.customer || !data.items_json)
     return { success: false, message: "Data tidak lengkap." };
   const lock = LockService.getScriptLock();
@@ -361,7 +357,6 @@ function createTransaction(data) {
     lock.waitLock(5000);
     const sheetTrx = getSheet("transactions");
     const sheetPkg = getSheet("packages");
-    const sheetPromo = getSheet("promos");
 
     let items = [];
     try {
@@ -377,7 +372,7 @@ function createTransaction(data) {
     for (let i = 0; i < items.length; i++) {
       let serverHarga = 0;
       for (let j = 1; j < pkgData.length; j++) {
-        if (pkgData[j][1] === items[i].paket) {
+        if (pkgData[j][0] === items[i].id) {
           serverHarga = parseInt(pkgData[j][2]);
           break;
         }
@@ -387,45 +382,23 @@ function createTransaction(data) {
           success: false,
           message: "Paket " + items[i].paket + " tidak valid.",
         };
+      
+      let beratStr = items[i].berat;
+      if (typeof beratStr === 'string') beratStr = beratStr.replace(',', '.');
+      let berat = parseFloat(beratStr);
+      if (isNaN(berat) || berat <= 0) {
+        throw new Error(`Data tidak valid: Berat untuk item ${items[i].paket} harus berupa angka positif.`);
+      }
+
       items[i].harga = serverHarga;
-      items[i].subtotal = serverHarga * parseFloat(items[i].berat);
+      items[i].subtotal = serverHarga * berat;
       subtotal += items[i].subtotal;
-      totalBerat += parseFloat(items[i].berat);
+      totalBerat += berat;
     }
 
     data.items_json = JSON.stringify(items);
 
-    let diskon = 0;
-    let appliedPromo = "";
-
-    // Validasi Promo di Server-Side
-    if (data.kode_promo) {
-      const promoData = sheetPromo.getDataRange().getValues();
-      const today = new Date();
-      for (let i = 1; i < promoData.length; i++) {
-        if (
-          String(promoData[i][1]).toUpperCase() ===
-          String(data.kode_promo).toUpperCase()
-        ) {
-          let pType = promoData[i][2];
-          let pVal = parseInt(promoData[i][3]) || 0;
-          let pMin = parseInt(promoData[i][4]) || 0;
-          let pDate = new Date(promoData[i][5]);
-          pDate.setHours(23, 59, 59, 999); // Valid hingga akhir hari
-          let pStatus = promoData[i][6];
-
-          if (pStatus === "Aktif" && today <= pDate && subtotal >= pMin) {
-            appliedPromo = String(data.kode_promo).toUpperCase();
-            if (pType === "Persen") diskon = subtotal * (pVal / 100);
-            else diskon = pVal;
-            if (diskon > subtotal) diskon = subtotal; // Cegah minus
-          }
-          break;
-        }
-      }
-    }
-
-    let grandTotal = subtotal - diskon;
+    let grandTotal = subtotal;
 
     // [P0] Gunakan UUID untuk ID — menghindari collision pada transaksi bersamaan
     const id = generateId("TRX");
@@ -436,7 +409,7 @@ function createTransaction(data) {
     // [P0] Server hitung status_pembayaran sendiri — JANGAN percaya input client
     const terbayar = parseInt(data.terbayar) || 0;
     let statusPay;
-    if (terbayar >= grandTotal && terbayar > 0) statusPay = "Lunas";
+    if (grandTotal === 0 || (terbayar >= grandTotal && terbayar > 0)) statusPay = "Lunas";
     else if (terbayar > 0) statusPay = "DP";
     else statusPay = "Belum Lunas";
 
@@ -458,8 +431,8 @@ function createTransaction(data) {
       data.estimasi || "",
       data.metode_pembayaran || "Tunai",
       statusPay,
-      appliedPromo,
-      diskon,
+      "",
+      0,
       data.catatan || "",
       terbayar,
       data.items_json,
@@ -475,8 +448,6 @@ function createTransaction(data) {
       tanggal: date.toISOString(),
       total: grandTotal,
       subtotal: subtotal,
-      diskon: diskon,
-      appliedPromo: appliedPromo,
       status_pembayaran: statusPay,
     };
   } catch (e) {
@@ -491,7 +462,8 @@ function createTransaction(data) {
   }
 }
 
-function updateTransactionStatus(id, newStatus) {
+function updateTransactionStatus(token, id, newStatus) {
+  validateSession_(token);
   const lock = LockService.getScriptLock();
   try {
     lock.waitLock(3000);
@@ -514,7 +486,8 @@ function updateTransactionStatus(id, newStatus) {
   }
 }
 
-function lunasDanAmbil(id, metode) {
+function lunasDanAmbil(token, id, metode) {
+  validateSession_(token);
   const lock = LockService.getScriptLock();
   try {
     lock.waitLock(3000);
@@ -555,7 +528,8 @@ function lunasDanAmbil(id, metode) {
   }
 }
 
-function deleteTransaction(id) {
+function deleteTransaction(token, id) {
+  validateSession_(token);
   const lock = LockService.getScriptLock();
   try {
     lock.waitLock(3000);
@@ -618,39 +592,66 @@ function saveOrUpdateCustomer(kasir, nama, wa, date) {
   sheet.appendRow([generateId("CUST"), nama, wa, date]);
 }
 
-function addCustomerData(nama, wa) {
-  getSheet("customers").appendRow([
-    generateId("CUST"),
-    nama,
-    wa,
-    new Date().toISOString(),
-  ]);
-  return { success: true };
+function addCustomerData(token, nama, wa) {
+  validateSession_(token);
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(3000);
+    getSheet("customers").appendRow([
+      generateId("CUST"),
+      nama,
+      wa,
+      new Date().toISOString(),
+    ]);
+    return { success: true };
+  } catch (e) {
+    return { success: false, message: e.message };
+  } finally {
+    lock.releaseLock();
+  }
 }
 
-function updateCustomerData(id, nama, wa) {
-  const sheet = getSheet("customers");
-  const ids = sheet.getRange(2, 1, sheet.getLastRow() - 1, 1).getValues();
-  // [OPT] Batch write: 2 setValue → 1 setValues
-  for (let i = 0; i < ids.length; i++) {
-    if (ids[i][0] === id) {
-      sheet.getRange(i + 2, 2, 1, 2).setValues([[nama, wa]]);
-      return { success: true };
+function updateCustomerData(token, id, nama, wa) {
+  validateSession_(token);
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(3000);
+    const sheet = getSheet("customers");
+    const ids = sheet.getRange(2, 1, sheet.getLastRow() - 1, 1).getValues();
+    // [OPT] Batch write: 2 setValue → 1 setValues
+    for (let i = 0; i < ids.length; i++) {
+      if (ids[i][0] === id) {
+        sheet.getRange(i + 2, 2, 1, 2).setValues([[nama, wa]]);
+        return { success: true };
+      }
     }
+    return { success: false };
+  } catch (e) {
+    return { success: false, message: e.message };
+  } finally {
+    lock.releaseLock();
   }
-  return { success: false };
 }
 
-function deleteCustomerData(id) {
-  const sheet = getSheet("customers");
-  const ids = sheet.getRange(2, 1, sheet.getLastRow() - 1, 1).getValues();
-  for (let i = 0; i < ids.length; i++) {
-    if (ids[i][0] === id) {
-      sheet.deleteRow(i + 2);
-      return { success: true };
+function deleteCustomerData(token, id) {
+  validateSession_(token);
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(3000);
+    const sheet = getSheet("customers");
+    const ids = sheet.getRange(2, 1, sheet.getLastRow() - 1, 1).getValues();
+    for (let i = 0; i < ids.length; i++) {
+      if (ids[i][0] === id) {
+        sheet.deleteRow(i + 2);
+        return { success: true };
+      }
     }
+    return { success: false };
+  } catch (e) {
+    return { success: false, message: e.message };
+  } finally {
+    lock.releaseLock();
   }
-  return { success: false };
 }
 
 function getPackages() {
@@ -671,20 +672,30 @@ function getPackages() {
     }));
 }
 
-function addPackage(nama, harga, durasi, satuan, kategori, status) {
-  getSheet("packages").appendRow([
-    generateId("PKG"),
-    nama,
-    harga,
-    durasi,
-    satuan,
-    kategori || "",
-    status || "Aktif",
-  ]);
-  return { success: true };
+function addPackage(token, nama, harga, durasi, satuan, kategori, status) {
+  validateSession_(token);
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(3000);
+    getSheet("packages").appendRow([
+      generateId("PKG"),
+      nama,
+      harga,
+      durasi,
+      satuan,
+      kategori || "",
+      status || "Aktif",
+    ]);
+    return { success: true };
+  } catch (e) {
+    return { success: false, message: e.message };
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 function updatePackage(
+  token,
   id,
   newNama,
   newHarga,
@@ -693,30 +704,40 @@ function updatePackage(
   newKategori,
   newStatus,
 ) {
-  const sheet = getSheet("packages");
-  const ids = sheet.getRange(2, 1, sheet.getLastRow() - 1, 1).getValues();
-  // [OPT] Batch write: 6 setValue → 1 setValues
-  for (let i = 0; i < ids.length; i++) {
-    if (ids[i][0] === id) {
-      sheet
-        .getRange(i + 2, 2, 1, 6)
-        .setValues([
-          [
-            newNama,
-            newHarga,
-            newDurasi,
-            newSatuan,
-            newKategori || "",
-            newStatus || "Aktif",
-          ],
-        ]);
-      return { success: true };
+  validateSession_(token);
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(3000);
+    const sheet = getSheet("packages");
+    const ids = sheet.getRange(2, 1, sheet.getLastRow() - 1, 1).getValues();
+    // [OPT] Batch write: 6 setValue → 1 setValues
+    for (let i = 0; i < ids.length; i++) {
+      if (ids[i][0] === id) {
+        sheet
+          .getRange(i + 2, 2, 1, 6)
+          .setValues([
+            [
+              newNama,
+              newHarga,
+              newDurasi,
+              newSatuan,
+              newKategori || "",
+              newStatus || "Aktif",
+            ],
+          ]);
+        return { success: true };
+      }
     }
+    return { success: false };
+  } catch (e) {
+    return { success: false, message: e.message };
+  } finally {
+    lock.releaseLock();
   }
-  return { success: false };
 }
 
-function updatePackageStatus(id, newStatus) {
+function updatePackageStatus(token, id, newStatus) {
+  validateSession_(token);
   const lock = LockService.getScriptLock();
   try {
     lock.waitLock(3000);
@@ -739,16 +760,25 @@ function updatePackageStatus(id, newStatus) {
   }
 }
 
-function deletePackage(id) {
-  const sheet = getSheet("packages");
-  const ids = sheet.getRange(2, 1, sheet.getLastRow() - 1, 1).getValues();
-  for (let i = 0; i < ids.length; i++) {
-    if (ids[i][0] === id) {
-      sheet.deleteRow(i + 2);
-      return { success: true };
+function deletePackage(token, id) {
+  validateSession_(token);
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(3000);
+    const sheet = getSheet("packages");
+    const ids = sheet.getRange(2, 1, sheet.getLastRow() - 1, 1).getValues();
+    for (let i = 0; i < ids.length; i++) {
+      if (ids[i][0] === id) {
+        sheet.deleteRow(i + 2);
+        return { success: true };
+      }
     }
+    return { success: false };
+  } catch (e) {
+    return { success: false, message: e.message };
+  } finally {
+    lock.releaseLock();
   }
-  return { success: false };
 }
 
 function getSettings() {
@@ -762,7 +792,8 @@ function getSettings() {
   return settings;
 }
 
-function saveSettingsConfig(dataObj) {
+function saveSettingsConfig(token, dataObj) {
+  validateSession_(token);
   const lock = LockService.getScriptLock();
   try {
     lock.waitLock(3000);
@@ -789,62 +820,19 @@ function saveSettingsConfig(dataObj) {
   }
 }
 
-// FUNGSI PROMO
-function getPromos() {
-  const sheet = getSheet("promos");
-  const rawData = sheet.getDataRange().getValues();
-  if (rawData.length <= 1) return [];
-  return rawData
-    .slice(1)
-    .filter((r) => r.join("").trim() !== "")
-    .map((r) => ({
-      id: r[0],
-      kode_promo: String(r[1]).toUpperCase(),
-      tipe_diskon: String(r[2]),
-      nilai_diskon: parseInt(r[3]) || 0,
-      min_transaksi: parseInt(r[4]) || 0,
-      berlaku_hingga: parseSafeDate(r[5]),
-      status: String(r[6]),
-    }));
-}
-
-function addPromo(kode, tipe, nilai, min, tanggal, status) {
-  getSheet("promos").appendRow([
-    generateId("PRM"),
-    kode.toUpperCase(),
-    tipe,
-    nilai,
-    min,
-    tanggal,
-    status,
-  ]);
-  return { success: true };
-}
-
-function updatePromo(id, kode, tipe, nilai, min, tanggal, status) {
-  const sheet = getSheet("promos");
-  const ids = sheet.getRange(2, 1, sheet.getLastRow() - 1, 1).getValues();
-  for (let i = 0; i < ids.length; i++) {
-    if (ids[i][0] === id) {
-      sheet
-        .getRange(i + 2, 2, 1, 6)
-        .setValues([[kode.toUpperCase(), tipe, nilai, min, tanggal, status]]);
-      return { success: true };
+// Fungsi utilitas: Hapus sheet promos dari database (jalankan sekali)
+function deletePromosSheet() {
+  try {
+    const ss = SpreadsheetApp.openById(DB_ID);
+    const sheet = ss.getSheetByName("promos");
+    if (sheet) {
+      ss.deleteSheet(sheet);
+      return "Sheet promos berhasil dihapus.";
     }
+    return "Sheet promos tidak ditemukan.";
+  } catch (e) {
+    return "Gagal hapus: " + e.message;
   }
-  return { success: false };
-}
-
-function deletePromo(id) {
-  const sheet = getSheet("promos");
-  const ids = sheet.getRange(2, 1, sheet.getLastRow() - 1, 1).getValues();
-  for (let i = 0; i < ids.length; i++) {
-    if (ids[i][0] === id) {
-      sheet.deleteRow(i + 2);
-      return { success: true };
-    }
-  }
-  return { success: false };
 }
 
 // FUNGSI KHUSUS LAPORAN
@@ -868,8 +856,8 @@ function getReportData(startDateStr, endDateStr) {
       let r = rawData[i];
       if (r.join("").trim() === "") continue;
       
-      let trDate = new Date(r[1]);
-      let trPelunasanDate = r[18] && String(r[18]).trim() !== "" ? new Date(r[18]) : null;
+      let trDate = parseSafeDate(r[1]);
+      let trPelunasanDate = r[18] && String(r[18]).trim() !== "" ? parseSafeDate(r[18]) : null;
       
       // Filter Tanggal: Masuk jika tanggal pembuatan di dalam rentang ATAU tanggal pelunasan di dalam rentang
       let trDateInRange = true;
@@ -902,7 +890,7 @@ function getReportData(startDateStr, endDateStr) {
         kasir: String(r[7] || "-"),
         metode_pembayaran: String(r[11] || "Tunai"),
         status_pembayaran: String(r[12] || "Belum Lunas"),
-        diskon: parseInt(r[14]) || 0,
+
         terbayar: parseInt(r[16]) || (String(r[12] || "Belum Lunas") === "Lunas" ? parseInt(r[5]) || 0 : 0),
         items: r[17] || "[]",
         tanggal_pelunasan: trPelunasanDate && !isNaN(trPelunasanDate) ? trPelunasanDate.toISOString() : "",
