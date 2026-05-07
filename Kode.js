@@ -2,7 +2,19 @@
  * SISTEM MANAJEMEN LAUNDRY - SERVER SIDE
  */
 
-const DB_ID = "1D7m7mBUuPEVRLjRCQLY-MvRdYY-C3ldpS-mfPs0wQwU";
+// [SEC] DB_ID dimuat dari Script Properties agar tidak terekspos di source code.
+// Jalankan setupScriptProperties() sekali untuk menyimpan ID ke properties.
+// Fallback ke hardcoded ID untuk backward compatibility.
+function getDbId_() {
+  const props = PropertiesService.getScriptProperties();
+  let dbId = props.getProperty('DB_ID');
+  if (!dbId) {
+    // Fallback: auto-migrate hardcoded ID ke Script Properties
+    dbId = "1D7m7mBUuPEVRLjRCQLY-MvRdYY-C3ldpS-mfPs0wQwU";
+    props.setProperty('DB_ID', dbId);
+  }
+  return dbId;
+}
 
 function doGet() {
   const settings = getSettings();
@@ -39,15 +51,15 @@ function include(filename) {
 // [P1] Cache spreadsheet reference — menghindari openById() berulang (~200-500ms per panggilan)
 let _cachedSS = null;
 function getSS() {
-  if (!_cachedSS) _cachedSS = SpreadsheetApp.openById(DB_ID);
+  if (!_cachedSS) _cachedSS = SpreadsheetApp.openById(getDbId_());
   return _cachedSS;
 }
 
 function getSheet(name) {
-  const ss = getSS();
-  if (!ss) throw new Error("Spreadsheet tidak ditemukan.");
+  const ss = SpreadsheetApp.openById(getDbId_());
+  if (!ss) throw new Error("Kesalahan internal: Database tidak ditemukan.");
   const sheet = ss.getSheetByName(name);
-  if (!sheet) throw new Error("Sheet '" + name + "' tidak ditemukan.");
+  if (!sheet) throw new Error("Kesalahan internal: Tabel data tidak ditemukan.");
   return sheet;
 }
 
@@ -103,7 +115,7 @@ function setupBackupTrigger() {
 
 function dailyBackup() {
   try {
-    const ss = SpreadsheetApp.openById(DB_ID);
+    const ss = SpreadsheetApp.openById(getDbId_());
     const name =
       "Backup_LPremium_" +
       Utilities.formatDate(new Date(), "Asia/Jakarta", "yyyy-MM-dd");
@@ -132,8 +144,35 @@ function computeHash(rawPassword) {
   return txtHash;
 }
 
+function generateSalt(length = 16) {
+  const charset = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  let salt = '';
+  for (let i = 0; i < length; i++) {
+    salt += charset[Math.floor(Math.random() * charset.length)];
+  }
+  return salt;
+}
+
+function hashPassword(password) {
+  const salt = generateSalt();
+  const hash = computeHash(password + salt);
+  return salt + ':' + hash;
+}
+
+function verifyPassword(inputPassword, dbPassword) {
+  if (dbPassword.includes(':')) {
+    const parts = dbPassword.split(':');
+    const salt = parts[0];
+    const hash = computeHash(inputPassword + salt);
+    return hash === parts[1];
+  } else {
+    // Unsalted backward compatibility
+    return computeHash(inputPassword) === dbPassword;
+  }
+}
+
 function setupDatabase() {
-  const ss = SpreadsheetApp.openById(DB_ID);
+  const ss = SpreadsheetApp.openById(getDbId_());
   const sheets = [
     "users",
     "packages",
@@ -149,9 +188,15 @@ function setupDatabase() {
         sheet.appendRow(["username", "password", "role", "nama"]);
         sheet.appendRow([
           "admin",
-          computeHash("admin123"),
+          hashPassword("admin123"),
           "admin",
           "Administrator",
+        ]);
+        sheet.appendRow([
+          "kasir",
+          hashPassword("kasir123"),
+          "kasir",
+          "Staff Kasir",
         ]);
       } else if (name === "packages") {
         sheet.appendRow([
@@ -221,6 +266,15 @@ function validateSession_(token) {
   return JSON.parse(sessionData);
 }
 
+// [SEC] Validasi sesi + role admin — gunakan di semua fungsi yang hanya boleh diakses admin
+function validateAdminSession_(token) {
+  const session = validateSession_(token);
+  if (session.role !== "admin") {
+    throw new Error("Akses ditolak: Anda tidak memiliki izin untuk operasi ini.");
+  }
+  return session;
+}
+
 function login(username, password) {
   const cache = CacheService.getScriptCache();
   const attemptKey = "login_attempts_" + username;
@@ -234,11 +288,11 @@ function login(username, password) {
   try {
     const sheet = getSheet("users");
     const data = sheet.getDataRange().getValues();
-    const inputHash = computeHash(password);
+    const lowerUsername = username.toLowerCase();
     for (let i = 1; i < data.length; i++) {
-      if (String(data[i][0]).trim() === username) {
+      if (String(data[i][0]).trim().toLowerCase() === lowerUsername) {
         const dbPassword = String(data[i][1]).trim();
-        if (dbPassword !== inputHash) {
+        if (!verifyPassword(password, dbPassword)) {
           cache.put(
             attemptKey,
             (attempts ? parseInt(attempts) + 1 : 1).toString(),
@@ -246,6 +300,12 @@ function login(username, password) {
           );
           return { success: false, message: "Username atau password salah!" };
         }
+        
+        // Auto-migration to salted hash format if needed
+        if (!dbPassword.includes(':')) {
+          sheet.getRange(i + 1, 2).setValue(hashPassword(password));
+        }
+
         cache.remove(attemptKey);
         const token = Utilities.getUuid();
         const sessionData = JSON.stringify({ username: username, role: data[i][2], nama: data[i][3] });
@@ -285,7 +345,8 @@ function parseSafeDate(rawDate) {
   return new Date().toISOString();
 }
 
-function getTransactions() {
+function getTransactions(token) {
+  validateSession_(token);
   try {
     const sheet = getSheet("transactions");
     const lastRow = sheet.getLastRow();
@@ -529,7 +590,7 @@ function lunasDanAmbil(token, id, metode) {
 }
 
 function deleteTransaction(token, id) {
-  validateSession_(token);
+  validateAdminSession_(token);
   const lock = LockService.getScriptLock();
   try {
     lock.waitLock(3000);
@@ -552,7 +613,8 @@ function deleteTransaction(token, id) {
   }
 }
 
-function getCustomers() {
+function getCustomers(token) {
+  validateSession_(token);
   const sheet = getSheet("customers");
   const rawData = sheet.getDataRange().getValues();
   if (rawData.length <= 1) return [];
@@ -654,7 +716,8 @@ function deleteCustomerData(token, id) {
   }
 }
 
-function getPackages() {
+function getPackages(token) {
+  validateSession_(token);
   const sheet = getSheet("packages");
   const rawData = sheet.getDataRange().getValues();
   if (rawData.length <= 1) return [];
@@ -673,7 +736,7 @@ function getPackages() {
 }
 
 function addPackage(token, nama, harga, durasi, satuan, kategori, status) {
-  validateSession_(token);
+  validateAdminSession_(token);
   const lock = LockService.getScriptLock();
   try {
     lock.waitLock(3000);
@@ -704,7 +767,7 @@ function updatePackage(
   newKategori,
   newStatus,
 ) {
-  validateSession_(token);
+  validateAdminSession_(token);
   const lock = LockService.getScriptLock();
   try {
     lock.waitLock(3000);
@@ -737,7 +800,7 @@ function updatePackage(
 }
 
 function updatePackageStatus(token, id, newStatus) {
-  validateSession_(token);
+  validateAdminSession_(token);
   const lock = LockService.getScriptLock();
   try {
     lock.waitLock(3000);
@@ -761,7 +824,7 @@ function updatePackageStatus(token, id, newStatus) {
 }
 
 function deletePackage(token, id) {
-  validateSession_(token);
+  validateAdminSession_(token);
   const lock = LockService.getScriptLock();
   try {
     lock.waitLock(3000);
@@ -793,7 +856,7 @@ function getSettings() {
 }
 
 function saveSettingsConfig(token, dataObj) {
-  validateSession_(token);
+  validateAdminSession_(token);
   const lock = LockService.getScriptLock();
   try {
     lock.waitLock(3000);
@@ -823,7 +886,7 @@ function saveSettingsConfig(token, dataObj) {
 // Fungsi utilitas: Hapus sheet promos dari database (jalankan sekali)
 function deletePromosSheet() {
   try {
-    const ss = SpreadsheetApp.openById(DB_ID);
+    const ss = SpreadsheetApp.openById(getDbId_());
     const sheet = ss.getSheetByName("promos");
     if (sheet) {
       ss.deleteSheet(sheet);
@@ -836,7 +899,8 @@ function deletePromosSheet() {
 }
 
 // FUNGSI KHUSUS LAPORAN
-function getReportData(startDateStr, endDateStr) {
+function getReportData(token, startDateStr, endDateStr) {
+  validateAdminSession_(token);
   try {
     const sheet = getSheet("transactions");
     const lastRow = sheet.getLastRow();
@@ -903,4 +967,27 @@ function getReportData(startDateStr, endDateStr) {
     logError("getReportData", e.message);
     throw new Error("Gagal ambil data laporan: " + e.message);
   }
+}
+
+// ==========================================
+// 10. OPTIMASI & SYSTEM UTILITIES
+// ==========================================
+
+// [OPT] Fungsi Warmup untuk mencegah Cold Start
+function warmup() {
+  // Hanya melakukan operasi ringan untuk menjaga V8 engine tetap panas
+  CacheService.getScriptCache().get("warmup_ping");
+}
+
+function setupWarmupTrigger() {
+  const triggers = ScriptApp.getProjectTriggers();
+  for (let i = 0; i < triggers.length; i++) {
+    if (triggers[i].getHandlerFunction() === "warmup") {
+      ScriptApp.deleteTrigger(triggers[i]);
+    }
+  }
+  ScriptApp.newTrigger("warmup")
+    .timeBased()
+    .everyMinutes(5)
+    .create();
 }

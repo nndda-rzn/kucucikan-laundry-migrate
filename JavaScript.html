@@ -84,6 +84,8 @@
     } catch (e) {}
   }
 
+  let lastTransactionData = null;
+
   let appSettings = {
     app_name: "L-Premium",
     app_logo_url: "",
@@ -174,26 +176,38 @@
   });
 
   // QUICK AMOUNT BUTTONS
-  function setModalQuickAmount(amount) {
-    const input = document.getElementById("modalInputUang");
-    if (amount === "pas") {
-      if (!currentPickupTx) return;
-      input.value = parseInt(currentPickupTx.total) || 0;
-    } else {
-      input.value = amount;
-    }
-    calcModalKembalian();
+  // (setModalQuickAmount moved to bottom section)
+
+  // [OPT] Session Expiry Warning
+  let sessionCheckInterval = null;
+  function startSessionTimer() {
+    if (sessionCheckInterval) clearInterval(sessionCheckInterval);
+    const loginTime = Date.now();
+    sessionCheckInterval = setInterval(() => {
+      const elapsed = Date.now() - loginTime;
+      if (elapsed > 5.5 * 60 * 60 * 1000) { // Sekitar 5.5 jam (token kadaluarsa dalam 6 jam)
+         showToast("Peringatan: Sesi Anda akan berakhir dalam 30 menit. Harap simpan pekerjaan Anda.", "error");
+      }
+    }, 30 * 60 * 1000); // Check setiap 30 menit
   }
 
   // 4. FUNGSI TAMPILAN & LOADING
+  let loadingTimeout = null;
   function showLoading(s) {
     const ld = document.getElementById("loading");
+    const timeoutMsg = document.getElementById("loadingTimeoutMsg");
     if (s) {
       ld.classList.remove("hidden");
       ld.classList.add("flex");
+      if (timeoutMsg) timeoutMsg.classList.add("hidden");
+      
+      loadingTimeout = setTimeout(() => {
+        if (timeoutMsg) timeoutMsg.classList.remove("hidden");
+      }, 15000);
     } else {
       ld.classList.add("hidden");
       ld.classList.remove("flex");
+      if (loadingTimeout) clearTimeout(loadingTimeout);
     }
   }
 
@@ -482,6 +496,7 @@
       setTimeout(() => (dp.style.opacity = "1"), 50);
       document.getElementById("userNameDisplay").innerText =
         "Halo, " + escapeHTML(currentUser.nama || "Pengguna");
+      startSessionTimer(); // Memulai timer sesi 
       const sidebarUserName = document.getElementById("sidebarUserName");
       const sidebarUserRole = document.getElementById("sidebarUserRole");
       if (sidebarUserName)
@@ -938,7 +953,7 @@
           </div>`;
         showToast("Gagal memuat data pelanggan: " + err.message, "error");
       })
-      .getCustomers();
+      .getCustomers(currentUser.token);
   }
 
   function renderCustomerGrid(data) {
@@ -1246,7 +1261,7 @@
         showToast("Gagal memuat transaksi: " + err.message, "error");
         if (refreshEl) refreshEl.innerText = "Gagal memperbarui";
       })
-      .getTransactions();
+      .getTransactions(currentUser.token);
   }
 
   function updateOverviewStats() {
@@ -2142,6 +2157,7 @@ Terima kasih.`;
       document.getElementById("dpContainer").classList.add("hidden");
       document.getElementById("checkDP").checked = false;
       toggleDPView();
+      document.getElementById("viewNanti").classList.remove("hidden"); // [FIX] Bug viewNanti: tampilkan feedback visual saat "Bayar Nanti" dipilih
     } else {
       document.getElementById("dpContainer").classList.remove("hidden");
     }
@@ -2632,6 +2648,21 @@ Terima kasih.`;
     document.getElementById("notaSubtotal").innerText =
       "Rp " + subtotalReal.toLocaleString("id-ID");
 
+    // DP logic & Reset Container
+    const dpContainer = document.getElementById("notaDPContainer");
+    if (dpContainer) {
+      const total = parseInt(lastTransactionData.total) || 0;
+      const terbayar = parseInt(lastTransactionData.terbayar) || 0;
+      
+      if (terbayar > 0 && terbayar < total) {
+        document.getElementById("notaDibayar").innerText = "Rp " + terbayar.toLocaleString("id-ID");
+        document.getElementById("notaSisa").innerText = "Rp " + (total - terbayar).toLocaleString("id-ID");
+        dpContainer.classList.remove("hidden");
+      } else {
+        dpContainer.classList.add("hidden");
+      }
+    }
+
     const stBayar = document.getElementById("notaStatusBayar");
     stBayar.innerText =
       escapeHTML(lastTransactionData.status_pembayaran) +
@@ -2835,7 +2866,7 @@ Terima kasih.`;
         showLoading(false);
         showToast("Gagal mengambil data laporan: " + err.message, "error");
       })
-      .getReportData(startDate, endDate);
+      .getReportData(currentUser.token, startDate, endDate);
   }
 
   function exportToCSV() {
@@ -3171,7 +3202,7 @@ Terima kasih.`;
       .withFailureHandler(function (err) {
         showToast("Gagal memuat data layanan: " + err.message, "error");
       })
-      .getPackages();
+      .getPackages(currentUser.token);
   }
 
   function renderPaketGrid(data) {
