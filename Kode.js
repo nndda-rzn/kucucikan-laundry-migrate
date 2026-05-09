@@ -7,11 +7,11 @@
 // Fallback ke hardcoded ID untuk backward compatibility.
 function getDbId_() {
   const props = PropertiesService.getScriptProperties();
-  let dbId = props.getProperty('DB_ID');
+  let dbId = props.getProperty("DB_ID");
   if (!dbId) {
     // Fallback: auto-migrate hardcoded ID ke Script Properties
-    dbId = "1D7m7mBUuPEVRLjRCQLY-MvRdYY-C3ldpS-mfPs0wQwU";
-    props.setProperty('DB_ID', dbId);
+    dbId = "1_3qq0iZyn8dF7YwY0Y0qyyAtXu2n8tOKdpFuW1qkAzY";
+    props.setProperty("DB_ID", dbId);
   }
   return dbId;
 }
@@ -19,16 +19,17 @@ function getDbId_() {
 function doGet() {
   const settings = getSettings();
   const appName = settings.app_name || settings.nota_title || "L-Premium";
-  
+
   const template = HtmlService.createTemplateFromFile("index");
   template.appName = appName;
   template.appLogoUrl = settings.app_logo_url || "";
 
-  const output = template.evaluate()
+  const output = template
+    .evaluate()
     .setTitle(appName + " System")
     .addMetaTag("viewport", "width=device-width, initial-scale=1")
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
-    
+
   // Jika ada URL logo, jadikan sebagai favicon di tab browser
   if (settings.app_logo_url) {
     try {
@@ -40,7 +41,7 @@ function doGet() {
       logError("doGet_favicon", e.message, settings.app_logo_url);
     }
   }
-  
+
   return output;
 }
 
@@ -59,7 +60,8 @@ function getSheet(name) {
   const ss = SpreadsheetApp.openById(getDbId_());
   if (!ss) throw new Error("Kesalahan internal: Database tidak ditemukan.");
   const sheet = ss.getSheetByName(name);
-  if (!sheet) throw new Error("Kesalahan internal: Tabel data tidak ditemukan.");
+  if (!sheet)
+    throw new Error("Kesalahan internal: Tabel data tidak ditemukan.");
   return sheet;
 }
 
@@ -145,8 +147,9 @@ function computeHash(rawPassword) {
 }
 
 function generateSalt(length = 16) {
-  const charset = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-  let salt = '';
+  const charset =
+    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  let salt = "";
   for (let i = 0; i < length; i++) {
     salt += charset[Math.floor(Math.random() * charset.length)];
   }
@@ -156,12 +159,12 @@ function generateSalt(length = 16) {
 function hashPassword(password) {
   const salt = generateSalt();
   const hash = computeHash(password + salt);
-  return salt + ':' + hash;
+  return salt + ":" + hash;
 }
 
 function verifyPassword(inputPassword, dbPassword) {
-  if (dbPassword.includes(':')) {
-    const parts = dbPassword.split(':');
+  if (dbPassword.includes(":")) {
+    const parts = dbPassword.split(":");
     const salt = parts[0];
     const hash = computeHash(inputPassword + salt);
     return hash === parts[1];
@@ -173,13 +176,7 @@ function verifyPassword(inputPassword, dbPassword) {
 
 function setupDatabase() {
   const ss = SpreadsheetApp.openById(getDbId_());
-  const sheets = [
-    "users",
-    "packages",
-    "transactions",
-    "settings",
-    "customers",
-  ];
+  const sheets = ["users", "packages", "transactions", "settings", "customers"];
   sheets.forEach((name) => {
     let sheet = ss.getSheetByName(name);
     if (!sheet) {
@@ -258,10 +255,14 @@ function setupDatabase() {
 }
 
 function validateSession_(token) {
-  if (!token) throw new Error("Akses ditolak: Token autentikasi tidak ditemukan.");
+  if (!token)
+    throw new Error("Akses ditolak: Token autentikasi tidak ditemukan.");
   const cache = CacheService.getScriptCache();
   const sessionData = cache.get(token);
-  if (!sessionData) throw new Error("Akses ditolak: Sesi telah berakhir atau tidak valid. Silakan login kembali.");
+  if (!sessionData)
+    throw new Error(
+      "Akses ditolak: Sesi telah berakhir atau tidak valid. Silakan login kembali.",
+    );
   cache.put(token, sessionData, 28800);
   return JSON.parse(sessionData);
 }
@@ -270,7 +271,9 @@ function validateSession_(token) {
 function validateAdminSession_(token) {
   const session = validateSession_(token);
   if (session.role !== "admin") {
-    throw new Error("Akses ditolak: Anda tidak memiliki izin untuk operasi ini.");
+    throw new Error(
+      "Akses ditolak: Anda tidak memiliki izin untuk operasi ini.",
+    );
   }
   return session;
 }
@@ -300,17 +303,26 @@ function login(username, password) {
           );
           return { success: false, message: "Username atau password salah!" };
         }
-        
+
         // Auto-migration to salted hash format if needed
-        if (!dbPassword.includes(':')) {
+        if (!dbPassword.includes(":")) {
           sheet.getRange(i + 1, 2).setValue(hashPassword(password));
         }
 
         cache.remove(attemptKey);
         const token = Utilities.getUuid();
-        const sessionData = JSON.stringify({ username: username, role: data[i][2], nama: data[i][3] });
+        const sessionData = JSON.stringify({
+          username: username,
+          role: data[i][2],
+          nama: data[i][3],
+        });
         CacheService.getScriptCache().put(token, sessionData, 28800);
-        return { success: true, role: data[i][2], nama: data[i][3], token: token };
+        return {
+          success: true,
+          role: data[i][2],
+          nama: data[i][3],
+          token: token,
+        };
       }
     }
     cache.put(
@@ -399,9 +411,11 @@ function getTransactions(token) {
               subtotal: parseInt(r[5]) || 0,
             },
           ],
-      tanggal_pelunasan: (r[18] && String(r[18]).trim() !== "") ? parseSafeDate(r[18]) : "",
-      nominal_dp: parseInt(r[19]) || (parseInt(r[16]) || 0),
+      tanggal_pelunasan:
+        r[18] && String(r[18]).trim() !== "" ? parseSafeDate(r[18]) : "",
+      nominal_dp: parseInt(r[19]) || parseInt(r[16]) || 0,
       nominal_pelunasan: parseInt(r[20]) || 0,
+      metode_pelunasan: String(r[13] || ""),
     }));
   } catch (e) {
     logError("getTransactions", e.message);
@@ -443,16 +457,18 @@ function createTransaction(token, data) {
           success: false,
           message: "Paket " + items[i].paket + " tidak valid.",
         };
-      
+
       let beratStr = items[i].berat;
-      if (typeof beratStr === 'string') beratStr = beratStr.replace(',', '.');
+      if (typeof beratStr === "string") beratStr = beratStr.replace(",", ".");
       let berat = parseFloat(beratStr);
       if (isNaN(berat) || berat <= 0) {
-        throw new Error(`Data tidak valid: Berat untuk item ${items[i].paket} harus berupa angka positif.`);
+        throw new Error(
+          `Data tidak valid: Berat untuk item ${items[i].paket} harus berupa angka positif.`,
+        );
       }
 
       items[i].harga = serverHarga;
-      items[i].subtotal = serverHarga * berat;
+      items[i].subtotal = Math.round(serverHarga * berat);
       subtotal += items[i].subtotal;
       totalBerat += berat;
     }
@@ -470,7 +486,8 @@ function createTransaction(token, data) {
     // [P0] Server hitung status_pembayaran sendiri — JANGAN percaya input client
     const terbayar = parseInt(data.terbayar) || 0;
     let statusPay;
-    if (grandTotal === 0 || (terbayar >= grandTotal && terbayar > 0)) statusPay = "Lunas";
+    if (grandTotal === 0 || (terbayar >= grandTotal && terbayar > 0))
+      statusPay = "Lunas";
     else if (terbayar > 0) statusPay = "DP";
     else statusPay = "Belum Lunas";
 
@@ -564,17 +581,21 @@ function lunasDanAmbil(token, id, metode) {
         let currentDp = parseInt(rowData[19]);
         // Fallback untuk data lama yang belum punya nominal_dp (ambil dari terbayar)
         if (isNaN(currentDp)) {
-            currentDp = parseInt(rowData[16]) || 0;
-            rowData[19] = currentDp;
+          currentDp = parseInt(rowData[16]) || 0;
+          rowData[19] = currentDp;
         }
 
         rowData[6] = "Diambil"; // col G (status)
-        rowData[11] = metode; // col L (metode_pembayaran)
         rowData[12] = "Lunas"; // col M (status_pembayaran)
         rowData[16] = total; // col Q (terbayar)
-        
+
         rowData[18] = new Date().toISOString(); // tanggal_pelunasan
         rowData[20] = total - currentDp; // nominal_pelunasan
+        rowData[13] = metode; // col N (metode_pelunasan)
+
+        if (currentDp === 0) {
+          rowData[11] = metode; // Timpa metode_pembayaran utama hanya jika sebelumnya 0 DP
+        }
 
         sheet.getRange(row, 1, 1, 21).setValues([rowData]);
         return { success: true };
@@ -909,35 +930,36 @@ function getReportData(token, startDateStr, endDateStr) {
     // Mengambil seluruh data (tanpa limitasi 300 baris) agar laporan bulanan akurat
     const rawData = sheet.getRange(2, 1, lastRow - 1, 21).getValues();
     let validData = [];
-    
+
     let startD = startDateStr ? new Date(startDateStr) : null;
     if (startD) startD.setHours(0, 0, 0, 0);
-    
+
     let endD = endDateStr ? new Date(endDateStr) : null;
     if (endD) endD.setHours(23, 59, 59, 999);
 
     for (let i = 0; i < rawData.length; i++) {
       let r = rawData[i];
       if (r.join("").trim() === "") continue;
-      
+
       let trDate = parseSafeDate(r[1]);
-      let trPelunasanDate = r[18] && String(r[18]).trim() !== "" ? parseSafeDate(r[18]) : null;
-      
+      let trPelunasanDate =
+        r[18] && String(r[18]).trim() !== "" ? parseSafeDate(r[18]) : null;
+
       // Filter Tanggal: Masuk jika tanggal pembuatan di dalam rentang ATAU tanggal pelunasan di dalam rentang
       let trDateInRange = true;
       let trPelunasanDateInRange = false;
 
       if (!isNaN(trDate)) {
-          if (startD && trDate < startD) trDateInRange = false;
-          if (endD && trDate > endD) trDateInRange = false;
+        if (startD && trDate < startD) trDateInRange = false;
+        if (endD && trDate > endD) trDateInRange = false;
       } else {
-          trDateInRange = false;
+        trDateInRange = false;
       }
 
       if (trPelunasanDate && !isNaN(trPelunasanDate)) {
-          trPelunasanDateInRange = true;
-          if (startD && trPelunasanDate < startD) trPelunasanDateInRange = false;
-          if (endD && trPelunasanDate > endD) trPelunasanDateInRange = false;
+        trPelunasanDateInRange = true;
+        if (startD && trPelunasanDate < startD) trPelunasanDateInRange = false;
+        if (endD && trPelunasanDate > endD) trPelunasanDateInRange = false;
       }
 
       if (!trDateInRange && !trPelunasanDateInRange) continue;
@@ -945,7 +967,9 @@ function getReportData(token, startDateStr, endDateStr) {
       // Hanya memasukkan field yang dibutuhkan untuk laporan agar payload ringan
       validData.push({
         id: String(r[0] || "TRX-?"),
-        tanggal: !isNaN(trDate) ? trDate.toISOString() : new Date().toISOString(),
+        tanggal: !isNaN(trDate)
+          ? trDate.toISOString()
+          : new Date().toISOString(),
         customer: String(r[2] || "Pelanggan"),
         paket: String(r[3] || "Layanan"),
         berat: parseFloat(r[4]) || 0,
@@ -955,11 +979,19 @@ function getReportData(token, startDateStr, endDateStr) {
         metode_pembayaran: String(r[11] || "Tunai"),
         status_pembayaran: String(r[12] || "Belum Lunas"),
 
-        terbayar: parseInt(r[16]) || (String(r[12] || "Belum Lunas") === "Lunas" ? parseInt(r[5]) || 0 : 0),
+        terbayar:
+          parseInt(r[16]) ||
+          (String(r[12] || "Belum Lunas") === "Lunas"
+            ? parseInt(r[5]) || 0
+            : 0),
         items: r[17] || "[]",
-        tanggal_pelunasan: trPelunasanDate && !isNaN(trPelunasanDate) ? trPelunasanDate.toISOString() : "",
-        nominal_dp: parseInt(r[19]) || (parseInt(r[16]) || 0),
-        nominal_pelunasan: parseInt(r[20]) || 0
+        tanggal_pelunasan:
+          trPelunasanDate && !isNaN(trPelunasanDate)
+            ? trPelunasanDate.toISOString()
+            : "",
+        nominal_dp: parseInt(r[19]) || parseInt(r[16]) || 0,
+        nominal_pelunasan: parseInt(r[20]) || 0,
+        metode_pelunasan: String(r[13] || ""),
       });
     }
     return validData;
@@ -986,8 +1018,5 @@ function setupWarmupTrigger() {
       ScriptApp.deleteTrigger(triggers[i]);
     }
   }
-  ScriptApp.newTrigger("warmup")
-    .timeBased()
-    .everyMinutes(5)
-    .create();
+  ScriptApp.newTrigger("warmup").timeBased().everyMinutes(5).create();
 }

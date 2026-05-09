@@ -2,10 +2,7 @@
 <html lang="id">
   <head>
     <meta charset="UTF-8" />
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1.0"
-    />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title><?= appName ?> System</title>
     <?!= include('Tailwind'); ?>
     <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
@@ -38,9 +35,19 @@
         >
           Memproses
         </p>
-        <div id="loadingTimeoutMsg" class="hidden mt-4 text-center animate-fade-in">
-          <p class="text-[10px] text-slate-500 mb-2">Koneksi internet lambat / cold start...</p>
-          <button onclick="window.location.reload()" class="text-[10px] bg-slate-100 px-3 py-1.5 rounded-lg text-slate-600 font-bold hover:bg-slate-200 transition-colors">Muat Ulang Aplikasi</button>
+        <div
+          id="loadingTimeoutMsg"
+          class="hidden mt-4 text-center animate-fade-in"
+        >
+          <p class="text-[10px] text-slate-500 mb-2">
+            Koneksi internet lambat / cold start...
+          </p>
+          <button
+            onclick="window.location.reload()"
+            class="text-[10px] bg-slate-100 px-3 py-1.5 rounded-lg text-slate-600 font-bold hover:bg-slate-200 transition-colors"
+          >
+            Muat Ulang Aplikasi
+          </button>
         </div>
       </div>
     </div>
@@ -108,13 +115,27 @@
         class="bg-white p-6 md:p-8 rounded-[2rem] shadow-2xl w-[90%] max-w-sm transform scale-95 transition-transform duration-300"
         id="logoutConfirmContent"
       >
-        <div class="w-16 h-16 bg-slate-100 text-slate-500 rounded-full flex items-center justify-center mx-auto mb-5 shadow-inner">
-          <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
-              d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
+        <div
+          class="w-16 h-16 bg-slate-100 text-slate-500 rounded-full flex items-center justify-center mx-auto mb-5 shadow-inner"
+        >
+          <svg
+            class="w-8 h-8"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2.5"
+              d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+            />
           </svg>
         </div>
-        <h3 id="logoutConfirmTitle" class="text-xl font-black text-center text-slate-900 mb-2 tracking-tight">
+        <h3
+          id="logoutConfirmTitle"
+          class="text-xl font-black text-center text-slate-900 mb-2 tracking-tight"
+        >
           Keluar dari Sistem?
         </h3>
         <p class="text-sm text-center text-slate-500 mb-6 leading-relaxed">
@@ -138,7 +159,6 @@
       </div>
     </div>
 
-
     <div
       id="navConfirmModal"
       class="fixed inset-0 bg-slate-900/60 z-[170] hidden items-center justify-center backdrop-blur-sm transition-all"
@@ -153,13 +173,24 @@
         <div
           class="w-16 h-16 bg-amber-50 text-amber-500 rounded-full flex items-center justify-center mx-auto mb-5 shadow-inner"
         >
-          <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
+          <svg
+            class="w-8 h-8"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2.5"
               d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
             ></path>
           </svg>
         </div>
-        <h3 id="navConfirmTitle" class="text-xl font-black text-center text-slate-900 mb-2 tracking-tight">
+        <h3
+          id="navConfirmTitle"
+          class="text-xl font-black text-center text-slate-900 mb-2 tracking-tight"
+        >
           Transaksi Belum Disimpan
         </h3>
         <p class="text-sm text-center text-slate-500 mb-6 leading-relaxed">
@@ -183,7 +214,6 @@
         </div>
       </div>
     </div>
-
 
     <div
       id="waModal"
@@ -525,7 +555,6 @@
               <span class="uppercase text-[10px]">Subtotal</span>
               <span id="notaSubtotal" class="font-bold">Rp 0</span>
             </div>
-
           </div>
           <div class="flex justify-between items-center mb-2">
             <span class="font-bold uppercase text-sm">TOTAL</span>
@@ -536,11 +565,15 @@
             class="hidden space-y-1 mb-2 border-t border-slate-100 pt-2"
           >
             <div class="flex justify-between items-center text-slate-500">
-              <span class="uppercase text-[10px]">Dibayar (DP)</span>
+              <span id="lblNotaDibayar" class="uppercase text-[10px]"
+                >Dibayar (DP)</span
+              >
               <span id="notaDibayar" class="font-bold">Rp 0</span>
             </div>
             <div class="flex justify-between items-center text-red-500">
-              <span class="uppercase text-[10px] font-bold">Sisa Tagihan</span>
+              <span id="lblNotaSisa" class="uppercase text-[10px] font-bold"
+                >Sisa Tagihan</span
+              >
               <span id="notaSisa" class="font-bold">Rp 0</span>
             </div>
           </div>
@@ -592,8 +625,18 @@
             id="btnSendWA"
             class="hidden bg-[#25D366] hover:bg-[#1da851] text-white font-bold py-3.5 rounded-xl shadow-lg transition-all active:scale-95 justify-center items-center gap-2"
           >
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
+            <svg
+              class="w-5 h-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2.5"
+                d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
+              ></path>
             </svg>
             Kirim via WhatsApp
           </button>
@@ -626,49 +669,91 @@
       class="fixed inset-0 z-[80] flex bg-slate-50 transition-all duration-500"
     >
       <!-- Area Branding Kiri (Desktop Only) -->
-      <div class="hidden lg:flex flex-col justify-between w-1/2 bg-blue-600 p-12 relative overflow-hidden">
-        <div class="absolute inset-0 bg-gradient-to-br from-blue-700 to-blue-900 opacity-90 z-0"></div>
-        <div class="absolute inset-0 opacity-10 z-0" style="background-image: radial-gradient(#ffffff 1px, transparent 1px); background-size: 24px 24px;"></div>
-        
+      <div
+        class="hidden lg:flex flex-col justify-between w-1/2 bg-blue-600 p-12 relative overflow-hidden"
+      >
+        <div
+          class="absolute inset-0 bg-gradient-to-br from-blue-700 to-blue-900 opacity-90 z-0"
+        ></div>
+        <div
+          class="absolute inset-0 opacity-10 z-0"
+          style="
+            background-image: radial-gradient(#ffffff 1px, transparent 1px);
+            background-size: 24px 24px;
+          "
+        ></div>
+
         <div class="relative z-10 flex items-center gap-3">
-          <div id="loginLogoBoxLeft" class="<?= appLogoUrl ? 'bg-transparent' : 'bg-white' ?> w-12 h-12 rounded-xl shadow-lg flex items-center justify-center overflow-hidden">
-             <span id="loginLogoTextLeft" class="text-blue-600 text-xl font-black <?= appLogoUrl ? 'hidden' : '' ?>"
-              ><?= appName.length >= 2 ? appName.substring(0, 2).toUpperCase() : (appName.substring(0, 1).toUpperCase() || 'LP') ?></span
-             >
-             <img id="loginLogoImgLeft" src="<?= appLogoUrl ?>" alt="Logo" class="w-full h-full object-contain <?= appLogoUrl ? '' : 'hidden' ?>" />
+          <div
+            id="loginLogoBoxLeft"
+            class="<?= appLogoUrl ? 'bg-transparent' : 'bg-white' ?> w-12 h-12 rounded-xl shadow-lg flex items-center justify-center overflow-hidden"
+          >
+            <span
+              id="loginLogoTextLeft"
+              class="text-blue-600 text-xl font-black <?= appLogoUrl ? 'hidden' : '' ?>"
+              ><?= appName.length >= 2 ? appName.substring(0, 2).toUpperCase() :
+              (appName.substring(0, 1).toUpperCase() || 'LP') ?></span
+            >
+            <img
+              id="loginLogoImgLeft"
+              src="<?= appLogoUrl ?>"
+              alt="Logo"
+              class="w-full h-full object-contain <?= appLogoUrl ? '' : 'hidden' ?>"
+            />
           </div>
-          <span class="text-white font-bold text-xl tracking-wide"><?= appName ?></span>
+          <span class="text-white font-bold text-xl tracking-wide"
+            ><?= appName ?></span
+          >
         </div>
 
         <div class="relative z-10 mb-20">
-          <h1 class="text-4xl lg:text-5xl font-black text-white leading-tight mb-6 tracking-tight">
-            Tingkatkan Efisiensi <br /> <span class="text-blue-200">Bisnis Laundry</span> Anda.
+          <h1
+            class="text-4xl lg:text-5xl font-black text-white leading-tight mb-6 tracking-tight"
+          >
+            Tingkatkan Efisiensi <br />
+            <span class="text-blue-200">Bisnis Laundry</span> Anda.
           </h1>
           <p class="text-blue-100 text-lg max-w-md leading-relaxed">
-            Sistem Point of Sales kelas enterprise yang dirancang khusus untuk mempermudah manajemen transaksi, pelanggan, dan laporan operasional laundry Anda.
+            Sistem Point of Sales kelas enterprise yang dirancang khusus untuk
+            mempermudah manajemen transaksi, pelanggan, dan laporan operasional
+            laundry Anda.
           </p>
         </div>
-        
+
         <div class="relative z-10">
-          <p id="loginFooterText" class="text-blue-300 text-sm font-medium">© 2026 <?= appName ?> System</p>
+          <p id="loginFooterText" class="text-blue-300 text-sm font-medium">
+            © 2026 <?= appName ?> System
+          </p>
         </div>
       </div>
 
       <!-- Area Form Kanan -->
-      <div class="w-full lg:w-1/2 flex items-center justify-center p-6 sm:p-12 relative overflow-y-auto h-full">
+      <div
+        class="w-full lg:w-1/2 flex items-center justify-center p-6 sm:p-12 relative overflow-y-auto h-full"
+      >
         <!-- Dekorasi Mobile -->
-        <div class="absolute top-0 right-0 w-64 h-64 bg-blue-400 rounded-full mix-blend-multiply filter blur-3xl opacity-20 lg:hidden animate-pulse"></div>
-        <div class="absolute bottom-0 left-0 w-64 h-64 bg-blue-300 rounded-full mix-blend-multiply filter blur-3xl opacity-20 lg:hidden animate-pulse" style="animation-delay: 2s;"></div>
+        <div
+          class="absolute top-0 right-0 w-64 h-64 bg-blue-400 rounded-full mix-blend-multiply filter blur-3xl opacity-20 lg:hidden animate-pulse"
+        ></div>
+        <div
+          class="absolute bottom-0 left-0 w-64 h-64 bg-blue-300 rounded-full mix-blend-multiply filter blur-3xl opacity-20 lg:hidden animate-pulse"
+          style="animation-delay: 2s"
+        ></div>
 
-        <div class="w-full max-w-sm relative z-10 section-animate flex flex-col justify-center min-h-full py-8 lg:py-0">
+        <div
+          class="w-full max-w-sm relative z-10 section-animate flex flex-col justify-center min-h-full py-8 lg:py-0"
+        >
           <div class="text-center lg:text-left mb-8">
             <!-- Logo Mobile Only -->
             <div
               id="loginLogoBox"
               class="lg:hidden <?= appLogoUrl ? 'bg-transparent' : 'bg-blue-600' ?> w-16 h-16 rounded-[1.25rem] flex items-center justify-center mx-auto mb-4 shadow-lg shadow-blue-500/20 overflow-hidden"
             >
-              <span id="loginLogoText" class="text-white text-2xl font-black <?= appLogoUrl ? 'hidden' : '' ?>"
-                ><?= appName.length >= 2 ? appName.substring(0, 2).toUpperCase() : (appName.substring(0, 1).toUpperCase() || 'LP') ?></span
+              <span
+                id="loginLogoText"
+                class="text-white text-2xl font-black <?= appLogoUrl ? 'hidden' : '' ?>"
+                ><?= appName.length >= 2 ? appName.substring(0, 2).toUpperCase()
+                : (appName.substring(0, 1).toUpperCase() || 'LP') ?></span
               >
               <img
                 id="loginLogoImg"
@@ -677,10 +762,15 @@
                 class="w-full h-full object-contain <?= appLogoUrl ? '' : 'hidden' ?>"
               />
             </div>
-            
+
             <!-- App Name Mobile Only -->
-            <div class="lg:hidden text-blue-600 font-bold tracking-wider text-xs mb-1 uppercase" id="loginAppNameMobile"><?= appName ?></div>
-            
+            <div
+              class="lg:hidden text-blue-600 font-bold tracking-wider text-xs mb-1 uppercase"
+              id="loginAppNameMobile"
+            >
+              <?= appName ?>
+            </div>
+
             <h2
               class="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight mb-2"
             >
@@ -691,7 +781,10 @@
             </p>
           </div>
 
-          <form onsubmit="handleLogin(event)" class="bg-white/80 backdrop-blur-xl p-6 sm:p-8 rounded-[2rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100 lg:bg-transparent lg:shadow-none lg:border-none lg:p-0 lg:backdrop-blur-none">
+          <form
+            onsubmit="handleLogin(event)"
+            class="bg-white/80 backdrop-blur-xl p-6 sm:p-8 rounded-[2rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100 lg:bg-transparent lg:shadow-none lg:border-none lg:p-0 lg:backdrop-blur-none"
+          >
             <div class="space-y-5">
               <div>
                 <label
@@ -699,9 +792,21 @@
                   >Username</label
                 >
                 <div class="relative group">
-                  <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                    <svg class="h-5 w-5 text-slate-400 group-focus-within:text-blue-500 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  <div
+                    class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"
+                  >
+                    <svg
+                      class="h-5 w-5 text-slate-400 group-focus-within:text-blue-500 transition-colors"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+                      />
                     </svg>
                   </div>
                   <input
@@ -714,16 +819,28 @@
                   />
                 </div>
               </div>
-              
+
               <div>
                 <label
                   class="block text-[10px] font-bold text-slate-500 mb-1.5 uppercase tracking-wider ml-1"
                   >Password</label
                 >
                 <div class="relative group">
-                  <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                    <svg class="h-5 w-5 text-slate-400 group-focus-within:text-blue-500 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                  <div
+                    class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"
+                  >
+                    <svg
+                      class="h-5 w-5 text-slate-400 group-focus-within:text-blue-500 transition-colors"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+                      />
                     </svg>
                   </div>
                   <input
@@ -734,33 +851,98 @@
                     autocomplete="current-password"
                     required
                   />
-                  <button type="button" onclick="togglePasswordVisibility()" class="absolute inset-y-0 right-0 pr-4 flex items-center text-slate-400 hover:text-blue-500 transition-colors focus:outline-none">
-                    <svg id="eyeIconClosed" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                  <button
+                    type="button"
+                    onclick="togglePasswordVisibility()"
+                    class="absolute inset-y-0 right-0 pr-4 flex items-center text-slate-400 hover:text-blue-500 transition-colors focus:outline-none"
+                  >
+                    <svg
+                      id="eyeIconClosed"
+                      class="h-5 w-5"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"
+                      />
                     </svg>
-                    <svg id="eyeIconOpen" class="h-5 w-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                    <svg
+                      id="eyeIconOpen"
+                      class="h-5 w-5 hidden"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                      />
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
+                      />
                     </svg>
                   </button>
                 </div>
               </div>
-              
+
               <button
                 type="submit"
                 id="loginBtn"
                 class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-blue-500/30 transition-all active:scale-95 mt-4 flex items-center justify-center gap-2"
               >
                 <span id="loginBtnText">Masuk ke Sistem</span>
-                <svg id="loginSpinner" class="animate-spin h-5 w-5 text-white hidden" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                <svg
+                  id="loginSpinner"
+                  class="animate-spin h-5 w-5 text-white hidden"
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <circle
+                    class="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    stroke-width="4"
+                  ></circle>
+                  <path
+                    class="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                  ></path>
                 </svg>
               </button>
-              
-              <div id="loginErrorContainer" class="hidden overflow-hidden rounded-lg mt-3">
-                <p class="text-red-600 text-xs text-center font-bold bg-red-50 py-3 px-3 border border-red-100 flex items-start gap-2 text-left leading-tight">
-                  <svg class="w-4 h-4 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+
+              <div
+                id="loginErrorContainer"
+                class="hidden overflow-hidden rounded-lg mt-3"
+              >
+                <p
+                  class="text-red-600 text-xs text-center font-bold bg-red-50 py-3 px-3 border border-red-100 flex items-start gap-2 text-left leading-tight"
+                >
+                  <svg
+                    class="w-4 h-4 flex-shrink-0 mt-0.5"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                    />
+                  </svg>
                   <span id="loginError"></span>
                 </p>
               </div>
@@ -769,7 +951,12 @@
 
           <!-- Footer Mobile Only -->
           <div class="lg:hidden text-center mt-10 opacity-70">
-            <p id="loginFooterTextMobile" class="text-slate-400 text-[10px] font-bold uppercase tracking-wider">© 2026 <?= appName ?> System</p>
+            <p
+              id="loginFooterTextMobile"
+              class="text-slate-400 text-[10px] font-bold uppercase tracking-wider"
+            >
+              © 2026 <?= appName ?> System
+            </p>
           </div>
         </div>
       </div>
@@ -797,7 +984,11 @@
               id="sidebarLogoBox"
               class="<?= appLogoUrl ? 'bg-transparent' : 'bg-gradient-to-br from-blue-600 to-blue-700' ?> w-10 h-10 rounded-xl flex items-center justify-center text-white font-black text-lg shadow-md shadow-blue-500/20 flex-shrink-0 overflow-hidden"
             >
-              <span id="sidebarLogoText" class="<?= appLogoUrl ? 'hidden' : '' ?>"><?= appName.substring(0, 1).toUpperCase() || 'L' ?></span>
+              <span
+                id="sidebarLogoText"
+                class="<?= appLogoUrl ? 'hidden' : '' ?>"
+                ><?= appName.substring(0, 1).toUpperCase() || 'L' ?></span
+              >
               <img
                 id="sidebarLogoImg"
                 src="<?= appLogoUrl ?>"
@@ -1008,7 +1199,6 @@
               </svg>
               <span class="whitespace-nowrap">Pengaturan Sistem</span>
             </button>
-
           </div>
         </div>
 
@@ -1108,15 +1298,29 @@
                 id="lastRefresh"
                 class="text-[9px] font-bold text-slate-400 uppercase tracking-widest"
               ></p>
-              <button onclick="loadTransactions(true)" class="p-1.5 text-slate-400 hover:text-blue-600 bg-white hover:bg-blue-50 rounded-lg shadow-sm border border-slate-200 hover:border-blue-200 transition-all active:scale-95" title="Sinkronisasi Data">
-                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+              <button
+                onclick="loadTransactions(true)"
+                class="p-1.5 text-slate-400 hover:text-blue-600 bg-white hover:bg-blue-50 rounded-lg shadow-sm border border-slate-200 hover:border-blue-200 transition-all active:scale-95"
+                title="Sinkronisasi Data"
+              >
+                <svg
+                  class="w-3.5 h-3.5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                  ></path>
+                </svg>
               </button>
             </div>
           </div>
           <div id="recentActivity" class="space-y-3 md:space-y-4"></div>
         </div>
-
-
 
         <div
           id="section-laporan"
@@ -1160,8 +1364,18 @@
                   class="bg-emerald-500 hover:bg-emerald-600 text-white px-3 py-2.5 rounded-xl shadow-md active:scale-95 transition-all text-xs font-bold flex items-center gap-1.5"
                   title="Unduh laporan format CSV"
                 >
-                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+                  <svg
+                    class="w-3.5 h-3.5"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+                    ></path>
                   </svg>
                   CSV
                 </button>
@@ -1170,8 +1384,18 @@
                   class="bg-red-500 hover:bg-red-600 text-white px-3 py-2.5 rounded-xl shadow-md active:scale-95 transition-all text-xs font-bold flex items-center gap-1.5"
                   title="Unduh laporan format PDF"
                 >
-                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+                  <svg
+                    class="w-3.5 h-3.5"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+                    ></path>
                   </svg>
                   PDF
                 </button>
@@ -2420,7 +2644,8 @@
                 <span
                   id="settingsUnsavedBadge"
                   class="hidden text-[10px] font-black bg-amber-100 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-full uppercase tracking-wide animate-pulse"
-                >Belum Disimpan</span>
+                  >Belum Disimpan</span
+                >
               </h2>
               <p
                 class="text-xs md:text-sm font-medium text-slate-500 mt-1 md:ml-5"
@@ -2511,7 +2736,10 @@
                       <input
                         type="text"
                         id="setAppName"
-                        oninput="previewSetLogo(); markSettingsDirty()"
+                        oninput="
+                          previewSetLogo();
+                          markSettingsDirty();
+                        "
                         class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none font-semibold text-sm focus:bg-white focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all"
                       />
                     </div>
@@ -2524,7 +2752,10 @@
                         type="text"
                         id="setAppLogoUrl"
                         placeholder="https://..."
-                        oninput="previewSetLogo(); markSettingsDirty()"
+                        oninput="
+                          previewSetLogo();
+                          markSettingsDirty();
+                        "
                         class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none font-semibold text-sm focus:bg-white focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all"
                       />
                     </div>
@@ -2934,7 +3165,10 @@
                   </div>
                   <textarea
                     id="setWaTemplate"
-                    oninput="previewWaTemplate(); markSettingsDirty()"
+                    oninput="
+                      previewWaTemplate();
+                      markSettingsDirty();
+                    "
                     rows="10"
                     class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none font-mono text-xs md:text-sm leading-relaxed mb-6 focus:bg-white focus:border-[#25D366] focus:ring-4 focus:ring-[#25D366]/10 transition-all"
                   ></textarea>
@@ -3000,74 +3234,128 @@ Teks preview muncul di sini...</pre
       </main>
 
       <nav
-        class="lg:hidden fixed bottom-5 left-4 right-4 bg-white/90 backdrop-blur-md border border-slate-200 flex justify-between items-center px-4 py-2 z-50 shadow-xl rounded-[2rem]"
+        class="lg:hidden fixed bottom-5 left-4 right-4 bg-white/90 backdrop-blur-md border border-slate-200 flex justify-between items-center px-2 py-2 z-50 shadow-xl rounded-[2rem]"
         aria-label="Navigasi utama"
       >
         <!-- Beranda -->
         <button
           onclick="showSection('overview')"
           id="mob-overview"
-          class="flex flex-col items-center gap-0.5 px-2 py-1.5 text-slate-400 transition-colors mob-nav-btn flex-shrink-0 rounded-xl"
+          class="flex-1 flex flex-col items-center gap-0.5 px-1 py-1.5 text-slate-400 transition-colors mob-nav-btn rounded-xl"
           aria-label="Beranda"
         >
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-              d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
+          <svg
+            class="w-5 h-5"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"
+            />
           </svg>
-          <span class="text-[9px] font-bold uppercase tracking-wide">Beranda</span>
+          <span class="text-[9px] font-bold uppercase tracking-wide"
+            >Beranda</span
+          >
         </button>
 
         <!-- Pelanggan -->
         <button
           onclick="showSection('pelanggan')"
           id="mob-pelanggan"
-          class="flex flex-col items-center gap-0.5 px-2 py-1.5 text-slate-400 transition-colors mob-nav-btn flex-shrink-0 rounded-xl"
+          class="flex-1 flex flex-col items-center gap-0.5 px-1 py-1.5 text-slate-400 transition-colors mob-nav-btn rounded-xl"
           aria-label="Pelanggan"
         >
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-              d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/>
+          <svg
+            class="w-5 h-5"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"
+            />
           </svg>
-          <span class="text-[9px] font-bold uppercase tracking-wide">Pelanggan</span>
+          <span class="text-[9px] font-bold uppercase tracking-wide"
+            >Pelanggan</span
+          >
         </button>
 
         <!-- Transaksi (FAB tengah) -->
         <button
           onclick="showSection('transaksi')"
           id="mob-transaksi"
-          class="relative -top-4 flex-shrink-0"
+          class="flex-1 flex flex-col items-center justify-center relative -top-4"
           aria-label="Transaksi baru"
         >
-          <div class="bg-blue-600 p-4 rounded-full text-white shadow-xl shadow-blue-500/30 border-[4px] border-[#f8fafc] active:scale-90 transition-transform">
-            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M12 4v16m8-8H4"/>
+          <div
+            class="bg-blue-600 p-4 rounded-full text-white shadow-xl shadow-blue-500/30 border-[4px] border-[#f8fafc] active:scale-90 transition-transform"
+          >
+            <svg
+              class="w-6 h-6"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="3"
+                d="M12 4v16m8-8H4"
+              />
             </svg>
           </div>
-          <span class="block text-center text-[9px] font-bold uppercase tracking-wide text-blue-600 -mt-1">Transaksi</span>
         </button>
 
         <!-- Riwayat -->
         <button
           onclick="showSection('history')"
           id="mob-history"
-          class="flex flex-col items-center gap-0.5 px-2 py-1.5 text-slate-400 transition-colors mob-nav-btn flex-shrink-0 rounded-xl"
+          class="flex-1 flex flex-col items-center gap-0.5 px-1 py-1.5 text-slate-400 transition-colors mob-nav-btn rounded-xl"
           aria-label="Riwayat transaksi"
         >
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-              d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+          <svg
+            class="w-5 h-5"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+            />
           </svg>
-          <span class="text-[9px] font-bold uppercase tracking-wide">Riwayat</span>
+          <span class="text-[9px] font-bold uppercase tracking-wide"
+            >Riwayat</span
+          >
         </button>
 
         <!-- Menu -->
         <button
           onclick="toggleMobileMenu()"
-          class="flex flex-col items-center gap-0.5 px-2 py-1.5 text-slate-400 transition-colors mob-nav-btn flex-shrink-0 rounded-xl"
+          class="flex-1 flex flex-col items-center gap-0.5 px-1 py-1.5 text-slate-400 transition-colors mob-nav-btn rounded-xl"
           aria-label="Menu lainnya"
         >
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+          <svg
+            class="w-5 h-5"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M4 6h16M4 12h16M4 18h16"
+            />
           </svg>
           <span class="text-[9px] font-bold uppercase tracking-wide">Menu</span>
         </button>
