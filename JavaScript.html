@@ -9,6 +9,7 @@
   let allPackages = [];
   let editingPaketId = null;
   let currentReportData = [];
+  let currentReportType = "today";
   let editingCustomerId = null;
   let currentPaketFilter = "Semua";
   let historyRenderLimit = 30;
@@ -17,6 +18,7 @@
   const TRX_CACHE_TTL = 60000; // 1 menit TTL
   let autoRefreshInterval = null; // [OPT] Auto-refresh polling
   let draftSaveInterval = null; // [OPT] Draft auto-save
+  let pendingPelunasanId = null; // [FIX] Deklarasi eksplisit — sebelumnya implicit global
 
   // [OPT] Notifikasi suara saat transaksi berhasil
   function playNotifSound() {
@@ -570,7 +572,12 @@
         const onHist = !document
           .getElementById("section-history")
           .classList.contains("hidden");
+        const onLaporan = !document
+          .getElementById("section-laporan")
+          .classList.contains("hidden");
+          
         if (onDash || onHist) loadTransactions(true);
+        if (onLaporan) generateReport(currentReportType, true);
       }, 60000); // 1 menit
 
       // [OPT] Draft auto-save setiap 5 detik
@@ -765,10 +772,12 @@
   }
 
   function executeNavConfirm() {
+    // [FIX] Simpan target navigasi SEBELUM closeNavConfirmModal() me-null-kan pendingNavSection
+    const target = pendingNavSection;
     closeNavConfirmModal();
-    if (pendingNavSection) {
-      const target = pendingNavSection;
-      pendingNavSection = null;
+    if (target) {
+      currentCart = []; // Bersihkan keranjang agar tidak memicu konfirmasi lagi
+      renderCart();
       _doShowSection(target);
     }
   }
@@ -1189,6 +1198,16 @@
       showToast("Nama pelanggan wajib diisi!", "error");
       return;
     }
+    // [FIX] Nomor WA wajib diisi
+    if (!w) {
+      showToast("Nomor WhatsApp wajib diisi!", "error");
+      return;
+    }
+    // [FIX] Validasi format nomor WA (konsisten dengan previewTransaksi)
+    if (!/^[0-9]{10,15}$/.test(w.replace(/[\s\-\+]/g, ""))) {
+      showToast("Format nomor WhatsApp tidak valid! (10-15 digit)", "error");
+      return;
+    }
     const btn = document.getElementById("btnSaveCust");
     const origHtml = btn.innerHTML;
     btn.disabled = true;
@@ -1252,6 +1271,32 @@
         showToast("Gagal hapus pelanggan: " + err.message, "error");
       })
       .deleteCustomerData(currentUser.token, id);
+  }
+
+  // [FIX] Fungsi hapus transaksi — sebelumnya tidak pernah didefinisikan
+  function deleteTransaksiUI(id) {
+    showDeleteModal("transaction", id, "Hapus Transaksi?");
+  }
+
+  function performDeleteTransaction(id) {
+    showLoading(true);
+    google.script.run
+      .withSuccessHandler(function (res) {
+        showLoading(false);
+        if (res.success) {
+          showToast("Transaksi berhasil dihapus!");
+          // [FIX] Invalidasi cache + auto-refresh agar UI langsung ter-update
+          transactionsCacheTime = 0;
+          loadTransactions(true);
+        } else {
+          showToast(res.message || "Gagal menghapus transaksi!", "error");
+        }
+      })
+      .withFailureHandler(function (err) {
+        showLoading(false);
+        showToast("Gagal menghapus: " + err.message, "error");
+      })
+      .deleteTransaction(currentUser.token, id);
   }
 
   // 8. DASHBOARD & HISTORY
@@ -1734,7 +1779,6 @@
     cont.innerHTML = htmlString;
   }
 
-  let currentPickupTx = null;
 
   function handleStatusChange(transactionId, newStatus, selectElement) {
     let tx = null;
@@ -2208,6 +2252,7 @@ Terima kasih.`;
     document.getElementById("viewTunai").classList.add("hidden");
     document.getElementById("viewQRIS").classList.add("hidden");
     document.getElementById("viewTransfer").classList.add("hidden");
+    document.getElementById("viewNanti").classList.add("hidden"); // [FIX] Sembunyikan viewNanti saat ganti metode
     if (v === "Tunai")
       document.getElementById("viewTunai").classList.remove("hidden");
     else if (v === "QRIS")
@@ -2384,6 +2429,16 @@ Terima kasih.`;
       document.getElementById("inputUang").value = val;
     }
     calcKembalian();
+
+    // [FIX] Toggle active state pada tombol quick amount
+    const activeId = "qab-" + val;
+    const allBtns = document.querySelectorAll(".quick-amount-btn");
+    const inactiveClass = "bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 shadow-sm";
+    const activeClass = "bg-blue-600 hover:bg-blue-700 text-white border-blue-600 shadow-sm";
+    for (let i = 0; i < allBtns.length; i++) {
+      allBtns[i].className = "quick-amount-btn flex-1 min-w-[70px] text-[11px] font-bold py-2.5 rounded-lg transition-all active:scale-95 " +
+        (allBtns[i].id === activeId ? activeClass : inactiveClass);
+    }
   }
 
   function calcKembalian() {
@@ -2816,8 +2871,10 @@ Terima kasih.`;
   }
 
   // 11. LAPORAN & EXPORT
-  function generateReport(type) {
-    showLoading(true);
+  function generateReport(type, isBackground = false) {
+    if (!isBackground) showLoading(true);
+    currentReportType = type || currentReportType;
+    
     const now = new Date();
     const lblRentang = document.getElementById("lblRentang");
 
@@ -3011,6 +3068,14 @@ Terima kasih.`;
       .getReportData(currentUser.token, startDate, endDate);
   }
 
+  // [FIX] CSV escape helper — handle koma, kutip ganda, dan newline dalam data
+  function csvSafe(val) {
+    if (val === null || val === undefined) return '""';
+    const str = String(val);
+    // Selalu wrap dengan double-quotes dan escape internal quotes
+    return '"' + str.replace(/"/g, '""') + '"';
+  }
+
   function exportToCSV() {
     if (!currentReportData || currentReportData.length === 0) {
       showToast("Tidak ada data!", "error");
@@ -3028,39 +3093,41 @@ Terima kasih.`;
           const isFirst = j === 0;
           csvContent +=
             [
-              isFirst ? row.id : "",
-              isFirst ? '"' + dateStr + '"' : "",
-              isFirst ? '"' + row.customer + '"' : "",
-              '"' + itm.paket + '"',
-              itm.berat,
-              itm.satuan || "Kg",
-              isFirst ? row.total : "",
-              isFirst ? row.status : "",
-              isFirst ? row.metode_pembayaran : "",
-              isFirst ? row.status_pembayaran : "",
-              isFirst ? '"' + row.kasir + '"' : "",
+              isFirst ? csvSafe(row.id) : '""',
+              isFirst ? csvSafe(dateStr) : '""',
+              isFirst ? csvSafe(row.customer) : '""',
+              csvSafe(itm.paket),
+              csvSafe(itm.berat),
+              csvSafe(itm.satuan || "Kg"),
+              isFirst ? csvSafe(row.total) : '""',
+              isFirst ? csvSafe(row.status) : '""',
+              isFirst ? csvSafe(row.metode_pembayaran) : '""',
+              isFirst ? csvSafe(row.status_pembayaran) : '""',
+              isFirst ? csvSafe(row.kasir) : '""',
             ].join(",") + "\n";
         }
       } else {
         csvContent +=
           [
-            row.id,
-            '"' + dateStr + '"',
-            '"' + row.customer + '"',
-            '"' + row.paket + '"',
-            row.berat,
-            row.satuan || "Kg",
-            row.total,
-            row.status,
-            row.metode_pembayaran,
-            row.status_pembayaran,
-            '"' + row.kasir + '"',
+            csvSafe(row.id),
+            csvSafe(dateStr),
+            csvSafe(row.customer),
+            csvSafe(row.paket),
+            csvSafe(row.berat),
+            csvSafe(row.satuan || "Kg"),
+            csvSafe(row.total),
+            csvSafe(row.status),
+            csvSafe(row.metode_pembayaran),
+            csvSafe(row.status_pembayaran),
+            csvSafe(row.kasir),
           ].join(",") + "\n";
       }
     }
+    // [FIX] Tambahkan BOM untuk UTF-8 agar Excel membaca karakter Indonesia dengan benar
+    const BOM = "\uFEFF";
     const link = document.createElement("a");
     link.href = URL.createObjectURL(
-      new Blob([csvContent], { type: "text/csv;charset=utf-8;" }),
+      new Blob([BOM + csvContent], { type: "text/csv;charset=utf-8;" }),
     );
     link.download = "Laporan_" + new Date().getTime() + ".csv";
     document.body.appendChild(link);
@@ -3081,13 +3148,15 @@ Terima kasih.`;
     doc.setFontSize(10);
     doc.setTextColor(100);
     doc.text("Total Transaksi: " + currentReportData.length, 14, 28);
+    // [FIX] Revenue konsisten dengan dashboard — hitung nominal_dp + nominal_pelunasan
     let totalRev = 0;
     for (let i = 0; i < currentReportData.length; i++) {
-      if (currentReportData[i].status_pembayaran === "Lunas")
-        totalRev += parseInt(currentReportData[i].total);
+      const t = currentReportData[i];
+      totalRev += parseInt(t.nominal_dp || 0);
+      totalRev += parseInt(t.nominal_pelunasan || 0);
     }
     doc.text(
-      "Total Pendapatan (Lunas): Rp " + totalRev.toLocaleString("id-ID"),
+      "Total Pendapatan: Rp " + totalRev.toLocaleString("id-ID"),
       14,
       34,
     );
@@ -3641,7 +3710,7 @@ Terima kasih.`;
       .deletePackage(currentUser.token, id);
   }
 
-  // 14. REPEAT ORDER (fixed: handle layanan nonaktif)
+  // 14. REPEAT ORDER (fixed: support multi-item cart + handle layanan nonaktif)
   function repeatOrder(txId) {
     let tx = null;
     for (let i = 0; i < allTransactions.length; i++) {
@@ -3658,29 +3727,68 @@ Terima kasih.`;
     setTimeout(function () {
       document.getElementById("custName").value = tx.customer || "";
       document.getElementById("custWA").value = tx.whatsapp || "";
-      // Cari layanan di dropdown (hanya Aktif yang ada)
       const sel = document.getElementById("selectPaket");
-      let found = false;
-      for (let i = 0; i < sel.options.length; i++) {
-        if (sel.options[i].value === tx.paket) {
-          sel.selectedIndex = i;
-          found = true;
-          break;
+
+      // [FIX] Support multi-item: rebuild seluruh cart dari tx.items
+      if (tx.items && tx.items.length > 0) {
+        currentCart = [];
+        let skippedItems = [];
+        for (let k = 0; k < tx.items.length; k++) {
+          const item = tx.items[k];
+          // Cari layanan di dropdown aktif
+          let matched = false;
+          for (let j = 0; j < sel.options.length; j++) {
+            const opt = sel.options[j];
+            if (opt.getAttribute("data-id") === item.id || opt.value === item.paket) {
+              const h = parseInt(opt.getAttribute("data-harga")) || 0;
+              const sat = opt.getAttribute("data-satuan") || "Kg";
+              const dur = parseInt(opt.getAttribute("data-durasi")) || 0;
+              const pId = opt.getAttribute("data-id") || "";
+              const berat = parseFloat(item.berat) || 0;
+              currentCart.push({
+                id: pId,
+                paket: opt.value,
+                berat: berat,
+                satuan: sat,
+                harga: h,
+                durasi: dur,
+                subtotal: h * berat,
+              });
+              matched = true;
+              break;
+            }
+          }
+          if (!matched) skippedItems.push(item.paket);
         }
-      }
-      if (found) {
-        document.getElementById("berat").value = tx.berat || "";
-        handlePaketChange();
+        renderCart();
         calculateTotal();
-        showToast("Form diisi dari transaksi sebelumnya.");
+        if (currentCart.length > 0) {
+          showToast("Keranjang diisi dari transaksi sebelumnya (" + currentCart.length + " item)");
+        }
+        if (skippedItems.length > 0) {
+          showToast('Layanan "' + skippedItems.join('", "') + '" sudah tidak aktif.', "error");
+        }
       } else {
-        // Layanan sudah nonaktif atau tidak ditemukan
-        showToast(
-          'Layanan "' +
-            (tx.paket || "") +
-            '" sudah tidak aktif. Pilih layanan manual.',
-          "error",
-        );
+        // Fallback: single item (data lama)
+        let found = false;
+        for (let i = 0; i < sel.options.length; i++) {
+          if (sel.options[i].value === tx.paket) {
+            sel.selectedIndex = i;
+            found = true;
+            break;
+          }
+        }
+        if (found) {
+          document.getElementById("berat").value = tx.berat || "";
+          handlePaketChange();
+          calculateTotal();
+          showToast("Form diisi dari transaksi sebelumnya.");
+        } else {
+          showToast(
+            'Layanan "' + (tx.paket || "") + '" sudah tidak aktif. Pilih layanan manual.',
+            "error",
+          );
+        }
       }
     }, 400);
   }
@@ -3728,29 +3836,13 @@ Terima kasih.`;
       catatan: tx.catatan || "",
       items: tx.items,
       terbayar: tx.terbayar || 0,
+      nominal_dp: tx.nominal_dp || 0,
+      nominal_pelunasan: tx.nominal_pelunasan || 0,
     };
     openNota();
   }
 
-  // 16. HAPUS TRANSAKSI (ADMIN)
-  function deleteTransaksiUI(id) {
-    showDeleteModal("transaction", id, "Hapus Transaksi?");
-  }
-  function performDeleteTransaction(id) {
-    google.script.run
-      .withSuccessHandler(function (res) {
-        if (res.success) {
-          showToast("Transaksi dihapus!");
-          loadTransactions(true);
-        } else {
-          showToast("Gagal menghapus!", "error");
-        }
-      })
-      .withFailureHandler(function (err) {
-        showToast("Gagal hapus transaksi: " + err.message, "error");
-      })
-      .deleteTransaction(currentUser.token, id);
-  }
+  // 16. HAPUS TRANSAKSI (ADMIN) — Didefinisikan di bagian 6 (baris ~1275)
 
   // 17. KEYBOARD SHORTCUTS
   document.addEventListener("keydown", function (e) {

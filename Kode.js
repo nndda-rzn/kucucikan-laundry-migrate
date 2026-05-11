@@ -941,9 +941,13 @@ function getReportData(token, startDateStr, endDateStr) {
       let r = rawData[i];
       if (r.join("").trim() === "") continue;
 
-      let trDate = parseSafeDate(r[1]);
-      let trPelunasanDate =
-        r[18] && String(r[18]).trim() !== "" ? parseSafeDate(r[18]) : null;
+      // [FIX] parseSafeDate() mengembalikan string ISO, harus di-convert ke Date object untuk perbandingan
+      let trDateStr = parseSafeDate(r[1]);
+      let trDate = new Date(trDateStr);
+      let trPelunasanDate = null;
+      if (r[18] && String(r[18]).trim() !== "") {
+        trPelunasanDate = new Date(parseSafeDate(r[18]));
+      }
 
       // Filter Tanggal: Masuk jika tanggal pembuatan di dalam rentang ATAU tanggal pelunasan di dalam rentang
       let trDateInRange = true;
