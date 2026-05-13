@@ -643,10 +643,20 @@ function deleteTransaction(token, id) {
 
 function getCustomers(token) {
   validateSession_(token);
+  // [OPT] Cache pelanggan 2 menit — cukup fresh untuk operasional, tapi tidak membebani read setiap tab-switch
+  const cacheKey = "customers_list";
+  const cache = CacheService.getScriptCache();
+  const cached = cache.get(cacheKey);
+  if (cached) {
+    try { return JSON.parse(cached); } catch(e) {}
+  }
   const sheet = getSheet("customers");
   const rawData = sheet.getDataRange().getValues();
-  if (rawData.length <= 1) return [];
-  return rawData
+  if (rawData.length <= 1) {
+    try { cache.put(cacheKey, "[]", 120); } catch(e) {}
+    return [];
+  }
+  const result = rawData
     .slice(1)
     .filter((r) => r.join("").trim() !== "")
     .map((r) => ({
@@ -656,6 +666,8 @@ function getCustomers(token) {
       terakhir_order: parseSafeDate(r[3]),
     }))
     .reverse();
+  try { cache.put(cacheKey, JSON.stringify(result), 120); } catch(e) {}
+  return result;
 }
 
 function saveOrUpdateCustomer(kasir, nama, wa, date) {
@@ -693,6 +705,8 @@ function addCustomerData(token, nama, wa) {
       wa,
       new Date().toISOString(),
     ]);
+    // [OPT] Invalidate customer cache setelah write
+    CacheService.getScriptCache().remove("customers_list");
     return { success: true };
   } catch (e) {
     return { success: false, message: e.message };
@@ -712,6 +726,8 @@ function updateCustomerData(token, id, nama, wa) {
     for (let i = 0; i < ids.length; i++) {
       if (ids[i][0] === id) {
         sheet.getRange(i + 2, 2, 1, 2).setValues([[nama, wa]]);
+        // [OPT] Invalidate customer cache setelah write
+        CacheService.getScriptCache().remove("customers_list");
         return { success: true };
       }
     }
@@ -733,6 +749,8 @@ function deleteCustomerData(token, id) {
     for (let i = 0; i < ids.length; i++) {
       if (ids[i][0] === id) {
         sheet.deleteRow(i + 2);
+        // [OPT] Invalidate customer cache setelah write
+        CacheService.getScriptCache().remove("customers_list");
         return { success: true };
       }
     }
@@ -1267,13 +1285,15 @@ function getDashboardBundle(token) {
   try {
     const transactions = getTransactions(token);
     const packages = getPackages(token);
-    // Settings sudah di-cache via CacheService — overhead-nya minimal
     const settings = getSettings();
+    // [OPT] Sertakan customers dalam bundle — menggantikan fetchCustomers() terpisah saat startup
+    const customers = getCustomers(token);
     return {
       success: true,
       transactions: transactions,
       packages: packages,
-      settings: settings
+      settings: settings,
+      customers: customers
     };
   } catch (e) {
     logError("getDashboardBundle", e.message);

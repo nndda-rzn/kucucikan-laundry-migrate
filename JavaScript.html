@@ -16,9 +16,44 @@
   let isSubmitting = false; // [P0] Double-submit prevention
   let transactionsCacheTime = 0; // [P1] Client-side transaction cache
   const TRX_CACHE_TTL = 60000; // 1 menit TTL
+  let customersCacheTime = 0; // [OPT] Client-side customer cache
+  const CUSTOMERS_CACHE_TTL = 120000; // 2 menit TTL
   let autoRefreshInterval = null; // [OPT] Auto-refresh polling
   let draftSaveInterval = null; // [OPT] Draft auto-save
-  let pendingPelunasanId = null; // [FIX] Deklarasi eksplisit — sebelumnya implicit global
+  let pendingPelunasanId = null; // [FIX] Deklarasi eksplisit
+
+  // [OPT] Lazy-load ApexCharts + jsPDF — hanya dimuat saat tab Laporan pertama kali dibuka
+  // Menghemat ~400KB di initial page load, UI menjadi interaktif jauh lebih cepat
+  let _lazyScriptsLoaded = false;
+  let _lazyScriptsLoading = false;
+  let _lazyScriptCallbacks = [];
+
+  function ensureLazyScripts(callback) {
+    if (_lazyScriptsLoaded) { callback(); return; }
+    _lazyScriptCallbacks.push(callback);
+    if (_lazyScriptsLoading) return;
+    _lazyScriptsLoading = true;
+
+    function loadScript(src, next) {
+      const s = document.createElement('script');
+      s.src = src;
+      s.onload = next;
+      s.onerror = function() { console.error('[LazyLoad] Gagal: ' + src); next(); };
+      document.head.appendChild(s);
+    }
+
+    loadScript('https://cdn.jsdelivr.net/npm/apexcharts', function() {
+      loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js', function() {
+        loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js', function() {
+          _lazyScriptsLoaded = true;
+          _lazyScriptsLoading = false;
+          const cbs = _lazyScriptCallbacks.slice();
+          _lazyScriptCallbacks = [];
+          cbs.forEach(function(fn) { fn(); });
+        });
+      });
+    });
+  }
 
   // [OPT] Notifikasi suara saat transaksi berhasil
   function playNotifSound() {
@@ -608,11 +643,18 @@
                 sel.innerHTML = selHtml;
               }
             }
+            // Proses pelanggan dari bundle — tidak perlu fetchCustomers() terpisah
+            const custData = bundle.customers;
+            if (custData) {
+              allCustomers = custData;
+              customersCacheTime = Date.now();
+            }
           } else {
             // Fallback: panggil individual jika bundle gagal
             loadSettings();
             loadTransactions(true);
             fetchPaket();
+            fetchCustomers(true);
           }
         })
         .withFailureHandler(function(err) {
@@ -920,7 +962,7 @@
       toggleMobileMenu();
     }
 
-    if (name === "laporan") generateReport("today");
+    if (name === "laporan") ensureLazyScripts(function() { generateReport("today"); });
     if (name === "transaksi" || name === "paket") fetchPaket();
     if (name === "transaksi") restoreDraft();
     if (name === "pelanggan") {
@@ -1049,7 +1091,13 @@
   }
 
   // 7. PELANGGAN
-  function fetchCustomers() {
+  function fetchCustomers(forceRefresh) {
+    // [OPT] Client-side cache — skip GAS call jika data masih fresh (2 menit TTL)
+    const now = Date.now();
+    if (!forceRefresh && allCustomers.length > 0 && now - customersCacheTime < CUSTOMERS_CACHE_TTL) {
+      renderCustomerGrid(allCustomers);
+      return;
+    }
     // [P1] Tampilkan skeleton loading saat fetch
     const cont = document.getElementById("tableCustomers");
     if (cont && allCustomers.length === 0) {
@@ -1073,6 +1121,7 @@
     google.script.run
       .withSuccessHandler(function (data) {
         allCustomers = data || [];
+        customersCacheTime = Date.now(); // [OPT] Catat waktu cache
         renderCustomerGrid(allCustomers);
       })
       .withFailureHandler(function (err) {
@@ -3813,18 +3862,43 @@ Terima kasih.`;
     showDeleteModal("paket", id, "Hapus Layanan?");
   }
   function performDeletePaket(id) {
+    // [OPT] Optimistic UI Update — hapus dari allPackages lokal secara instan
+    let removedPkg = null;
+    let removedIdx = -1;
+    for (let i = 0; i < allPackages.length; i++) {
+      if (allPackages[i].id === id) {
+        removedPkg = allPackages[i];
+        removedIdx = i;
+        break;
+      }
+    }
+    if (removedIdx !== -1) {
+      allPackages.splice(removedIdx, 1);
+      if (editingPaketId === id) cancelEditPaket();
+      filterPaketList(); // re-render instan
+    }
+
     google.script.run
       .withSuccessHandler(function (res) {
         if (res.success) {
           showToast("Layanan dihapus!");
-          if (editingPaketId === id) cancelEditPaket();
-          fetchPaket();
+          // UI sudah ter-update, tidak perlu fetchPaket()
         } else {
           showToast("Gagal menghapus!", "error");
+          // Rollback
+          if (removedPkg !== null && removedIdx !== -1) {
+            allPackages.splice(removedIdx, 0, removedPkg);
+            filterPaketList();
+          }
         }
       })
       .withFailureHandler(function (err) {
         showToast("Gagal hapus layanan: " + err.message, "error");
+        // Rollback
+        if (removedPkg !== null && removedIdx !== -1) {
+          allPackages.splice(removedIdx, 0, removedPkg);
+          filterPaketList();
+        }
       })
       .deletePackage(currentUser.token, id);
   }
