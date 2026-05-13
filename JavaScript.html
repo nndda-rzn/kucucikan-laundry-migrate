@@ -3671,19 +3671,43 @@ Terima kasih.`;
 
   function togglePaketStatus(id, currentStatus) {
     const newStatus = currentStatus === "Nonaktif" ? "Aktif" : "Nonaktif";
+
+    // [OPT] Optimistic UI Update — langsung update UI tanpa menunggu GAS response
+    // Jika backend gagal, rollback ke status semula
+    let pkgIndex = -1;
+    let originalStatus = null;
+    for (let i = 0; i < allPackages.length; i++) {
+      if (allPackages[i].id === id) {
+        pkgIndex = i;
+        originalStatus = allPackages[i].status;
+        allPackages[i].status = newStatus; // update in-memory sekarang
+        break;
+      }
+    }
+    // Re-render grid dengan data lokal — INSTAN, tidak perlu tunggu server
+    filterPaketList();
+
     google.script.run
       .withSuccessHandler(function (res) {
         if (res.success) {
           showToast("Status layanan diperbarui!");
-          fetchPaket();
+          // UI sudah benar, tidak perlu fetchPaket() lagi
         } else {
           showToast("Gagal mengubah status.", "error");
-          fetchPaket(); // rollback visual
+          // Rollback optimistic update
+          if (pkgIndex !== -1 && originalStatus !== null) {
+            allPackages[pkgIndex].status = originalStatus;
+            filterPaketList();
+          }
         }
       })
       .withFailureHandler(function (err) {
         showToast("Gagal ubah status layanan: " + err.message, "error");
-        fetchPaket(); // rollback visual
+        // Rollback optimistic update
+        if (pkgIndex !== -1 && originalStatus !== null) {
+          allPackages[pkgIndex].status = originalStatus;
+          filterPaketList();
+        }
       })
       .updatePackageStatus(currentUser.token, id, newStatus);
   }
