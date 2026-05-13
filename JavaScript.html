@@ -823,6 +823,7 @@
       // Fallback untuk menu admin yang ID-nya berbeda
       const adminMap = {
         laporan: "adminLaporanDesktop",
+        kas: "adminKasDesktop",
         paket: "adminMenuDesktop",
         settings: "adminSettingsDesktop",
         pegawai: "adminUsersDesktop",
@@ -868,6 +869,9 @@
     }
     if (name === "pegawai") {
       fetchUsers();
+    }
+    if (name === "kas") {
+      fetchKasHarian();
     }
     if (name === "history" || name === "overview") {
       const sH = document.getElementById("searchHistory");
@@ -979,6 +983,8 @@
       performDeleteTransaction(deleteTargetId);
     } else if (deleteTargetType === "user") {
       performDeleteUser(deleteTargetId);
+    } else if (deleteTargetType === "pengeluaran") {
+      performDeletePengeluaran(deleteTargetId);
     }
   }
 
@@ -3067,7 +3073,31 @@ Terima kasih.`;
           custData,
           paymentMethodCount,
         );
-        showLoading(false);
+        
+        // Fetch kas data for the same period
+        google.script.run
+          .withSuccessHandler(function (kasRes) {
+            showLoading(false);
+            if (kasRes && kasRes.success) {
+              const uAwal = kasRes.total_uang_awal || 0;
+              const tKeluar = kasRes.total_pengeluaran || 0;
+              const estSaldo = uAwal + totalRev - tKeluar;
+              
+              const elAwal = document.getElementById("laporanTotalUangAwal");
+              const elKeluar = document.getElementById("laporanTotalPengeluaran");
+              const elSaldo = document.getElementById("laporanEstimasiSaldo");
+              
+              if(elAwal) elAwal.innerText = "Rp " + uAwal.toLocaleString("id-ID");
+              if(elKeluar) elKeluar.innerText = "Rp " + tKeluar.toLocaleString("id-ID");
+              if(elSaldo) elSaldo.innerText = "Rp " + estSaldo.toLocaleString("id-ID");
+            }
+          })
+          .withFailureHandler(function (err) {
+            showLoading(false);
+            console.error("Gagal mengambil data kas periode", err);
+          })
+          .getKasPeriode(currentUser.token, startDate, endDate);
+          
       })
       .withFailureHandler(function (err) {
         showLoading(false);
@@ -4098,4 +4128,163 @@ Terima kasih.`;
       })
       .deleteUserAccount(currentUser.token, username);
   }
+  // ==========================================
+  // 19. MANAJEMEN KAS HARIAN
+  // ==========================================
+
+  function fetchKasHarian() {
+    const filterInput = document.getElementById("kasDateFilter");
+    const dateStr = filterInput ? filterInput.value : "";
+    
+    showLoading(true);
+    google.script.run
+      .withSuccessHandler(function (res) {
+        showLoading(false);
+        if (res && res.success) {
+          // Update cards
+          document.getElementById("kasUangAwal").innerText = "Rp " + res.uang_awal.toLocaleString("id-ID");
+          document.getElementById("kasTotalPengeluaran").innerText = "Rp " + res.total_pengeluaran.toLocaleString("id-ID");
+          
+          // Estimasi penerimaan (kita ambil dari currentReportData jika ada, atau 0 untuk fallback)
+          // Secara ideal kita butuh hitung dari transaksi hari ini, tapi karena ini UI kas, kita akan fetch terpisah jika perlu.
+          // Untuk saat ini, mari kita biarkan kasPenerimaan kosong atau diisi oleh update dashboard.
+          
+          renderPengeluaranList(res.pengeluaran);
+        } else {
+          showToast(res ? res.message : "Gagal mengambil data kas.", "error");
+        }
+      })
+      .withFailureHandler(function (err) {
+        showLoading(false);
+        showToast("Error koneksi: " + err.message, "error");
+      })
+      .getKasHarian(currentUser.token, dateStr);
+  }
+
+  function submitUangAwal() {
+    const nominal = parseInt(document.getElementById("inputUangAwal").value) || 0;
+    if (nominal <= 0) {
+      showToast("Nominal uang awal tidak valid!", "error");
+      return;
+    }
+    
+    const filterInput = document.getElementById("kasDateFilter");
+    const dateStr = filterInput ? filterInput.value : "";
+    
+    showLoading(true);
+    google.script.run
+      .withSuccessHandler(function(res) {
+        showLoading(false);
+        if (res && res.success) {
+          showToast(res.isUpdate ? "Uang awal diperbarui!" : "Uang awal berhasil disimpan!");
+          document.getElementById("inputUangAwal").value = "";
+          fetchKasHarian();
+          // Update overview widgets if we are on today's date
+          if (!dateStr || dateStr === new Date().toISOString().split('T')[0]) {
+             loadTransactions(true); // refresh dashboard cards
+          }
+        } else {
+          showToast(res ? res.message : "Gagal menyimpan uang awal.", "error");
+        }
+      })
+      .withFailureHandler(function(err) {
+        showLoading(false);
+        showToast("Error koneksi: " + err.message, "error");
+      })
+      .saveUangAwal(currentUser.token, nominal, dateStr);
+  }
+
+  function submitPengeluaran() {
+    const keterangan = document.getElementById("inputPengeluaranKet").value.trim();
+    const kategori = document.getElementById("inputPengeluaranKat").value;
+    const jumlah = parseInt(document.getElementById("inputPengeluaranJumlah").value) || 0;
+    
+    if (!keterangan) {
+      showToast("Keterangan wajib diisi!", "error");
+      return;
+    }
+    if (jumlah <= 0) {
+      showToast("Jumlah pengeluaran tidak valid!", "error");
+      return;
+    }
+    
+    const filterInput = document.getElementById("kasDateFilter");
+    const dateStr = filterInput ? filterInput.value : "";
+    
+    showLoading(true);
+    google.script.run
+      .withSuccessHandler(function(res) {
+        showLoading(false);
+        if (res && res.success) {
+          showToast("Pengeluaran berhasil ditambahkan!");
+          document.getElementById("inputPengeluaranKet").value = "";
+          document.getElementById("inputPengeluaranJumlah").value = "";
+          fetchKasHarian();
+          if (!dateStr || dateStr === new Date().toISOString().split('T')[0]) {
+             loadTransactions(true);
+          }
+        } else {
+          showToast(res ? res.message : "Gagal menyimpan pengeluaran.", "error");
+        }
+      })
+      .withFailureHandler(function(err) {
+        showLoading(false);
+        showToast("Error koneksi: " + err.message, "error");
+      })
+      .savePengeluaran(currentUser.token, keterangan, kategori, jumlah, dateStr);
+  }
+
+  function renderPengeluaranList(data) {
+    const list = document.getElementById("listPengeluaran");
+    if (!data || data.length === 0) {
+      list.innerHTML = '<tr><td colspan="5" class="py-4 text-center text-sm text-slate-400">Belum ada pengeluaran hari ini.</td></tr>';
+      return;
+    }
+    
+    let html = "";
+    data.forEach(p => {
+      const d = new Date(p.tanggal);
+      const timeStr = d.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
+      const isAdmin = currentUser && currentUser.role === "admin";
+      const deleteBtn = isAdmin ? 
+        `<button onclick="deletePengeluaranUI('${p.id}')" class="text-slate-400 hover:text-red-500 transition-colors p-1" title="Hapus"><svg class="w-4 h-4 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button>` 
+        : `-`;
+        
+      html += `
+        <tr class="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
+          <td class="py-3 px-4 text-slate-600">${timeStr}</td>
+          <td class="py-3 px-4 text-slate-800 font-medium">${escapeHTML(p.keterangan)}</td>
+          <td class="py-3 px-4 text-slate-500"><span class="bg-slate-100 px-2 py-1 rounded text-xs">${escapeHTML(p.kategori)}</span></td>
+          <td class="py-3 px-4 text-slate-800 font-bold text-right">Rp ${p.jumlah.toLocaleString("id-ID")}</td>
+          <td class="py-3 px-4 text-center">${deleteBtn}</td>
+        </tr>
+      `;
+    });
+    list.innerHTML = html;
+  }
+
+  function deletePengeluaranUI(id) {
+    showDeleteModal("pengeluaran", id, "Hapus data pengeluaran ini?");
+  }
+
+  function performDeletePengeluaran(id) {
+    showLoading(true);
+    google.script.run
+      .withSuccessHandler(function(res) {
+        showLoading(false);
+        if (res && res.success) {
+          showToast("Pengeluaran berhasil dihapus!");
+          fetchKasHarian();
+          loadTransactions(true);
+        } else {
+          showToast(res ? res.message : "Gagal menghapus.", "error");
+        }
+      })
+      .withFailureHandler(function(err) {
+        showLoading(false);
+        showToast("Error koneksi: " + err.message, "error");
+      })
+      .deletePengeluaran(currentUser.token, id);
+  }
+
 </script>
