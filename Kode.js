@@ -890,17 +890,28 @@ function saveSettingsConfig(token, dataObj) {
     lock.waitLock(3000);
     const sheet = getSheet("settings");
     const data = sheet.getDataRange().getValues();
+
+    // [OPT] Batch write: update in-memory dulu, lalu tulis semua sekaligus
+    // Menggantikan N-call setValue() → 1 setValues() + 1 appendRow batch
+    const keysToAdd = [];
     for (let key in dataObj) {
       let found = false;
       for (let i = 1; i < data.length; i++) {
         if (data[i][0] === key) {
-          sheet.getRange(i + 1, 2).setValue(dataObj[key]);
+          data[i][1] = dataObj[key]; // update in-memory saja
           found = true;
           break;
         }
       }
-      if (!found) sheet.appendRow([key, dataObj[key]]);
+      if (!found) keysToAdd.push([key, dataObj[key]]);
     }
+    // 1 batch write untuk semua row yang diupdate
+    sheet.getRange(1, 1, data.length, 2).setValues(data);
+    // Append key baru (jika ada) dalam 1 operasi
+    if (keysToAdd.length > 0) {
+      sheet.getRange(data.length + 1, 1, keysToAdd.length, 2).setValues(keysToAdd);
+    }
+
     CacheService.getScriptCache().remove("app_settings");
     return { success: true };
   } catch (e) {
@@ -980,9 +991,9 @@ function saveUangAwal(token, nominal, dateStr) {
 }
 
 function getKasHarian(token, tanggalStr) {
-  validateSession_(token); // both admin and kasir can view overview, but let's allow fetching data
+  validateSession_(token);
   try {
-    setupKasSheet_();
+    // [OPT] Hapus setupKasSheet_() — sheet sudah dibuat saat setupDatabase(), tidak perlu cek ulang di setiap read
     const targetDate = tanggalStr ? new Date(tanggalStr) : new Date();
     targetDate.setHours(0, 0, 0, 0);
     
@@ -1087,8 +1098,7 @@ function deletePengeluaran(token, id) {
 function getKasPeriode(token, startDateStr, endDateStr) {
   validateAdminSession_(token);
   try {
-    setupKasSheet_();
-    
+    // [OPT] Hapus setupKasSheet_() — tidak diperlukan di operasi baca
     let startD = startDateStr ? new Date(startDateStr) : null;
     if (startD) startD.setHours(0, 0, 0, 0);
 
@@ -1215,6 +1225,25 @@ function getReportData(token, startDateStr, endDateStr) {
   }
 }
 
+// [OPT] Fungsi gabungan: mengambil data Laporan + data Kas dalam 1 GAS call.
+// Menggantikan 2 serial nested call di frontend (sebelumnya: getReportData → callback → getKasPeriode).
+// Menghemat 1 round-trip GAS (~1-5 detik) setiap kali tab Laporan dibuka.
+function getReportAndKasData(token, startDateStr, endDateStr) {
+  validateAdminSession_(token);
+  try {
+    const reportData = getReportData(token, startDateStr, endDateStr);
+    const kasResult = getKasPeriode(token, startDateStr, endDateStr);
+    return {
+      success: true,
+      report: reportData,
+      kas: kasResult
+    };
+  } catch (e) {
+    logError("getReportAndKasData", e.message);
+    return { success: false, message: "Gagal mengambil data laporan: " + e.message };
+  }
+}
+
 // ==========================================
 // 10. OPTIMASI & SYSTEM UTILITIES
 // ==========================================
@@ -1292,13 +1321,10 @@ function saveUserAccount(token, isEdit, oldUsername, username, password, role, n
                }
              }
           }
-          
-          sheet.getRange(row, 1).setValue(cleanUsername);
-          if (password && password.trim() !== "") {
-             sheet.getRange(row, 2).setValue(hashPassword(password));
-          }
-          sheet.getRange(row, 3).setValue(role);
-          sheet.getRange(row, 4).setValue(nama);
+
+          // [OPT] Batch write: 4 setValue() → 1 setValues() — 4x lebih cepat
+          const newPass = (password && password.trim() !== "") ? hashPassword(password) : data[i][1];
+          sheet.getRange(row, 1, 1, 4).setValues([[cleanUsername, newPass, role, nama]]);
           
           return { success: true, message: "Akun berhasil diupdate." };
         }

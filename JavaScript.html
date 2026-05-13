@@ -579,7 +579,9 @@
           .classList.contains("hidden");
           
         if (onDash || onHist) loadTransactions(true);
-        if (onLaporan) generateReport(currentReportType, true);
+        // [OPT] Nonaktifkan auto-refresh laporan — generateReport sudah 1 GAS call (berat),
+        // cukup dipanggil saat user membuka tab. Polling tiap menit tidak sebanding biayanya.
+        // if (onLaporan) generateReport(currentReportType, true);
       }, 60000); // 1 menit
 
       // [OPT] Draft auto-save setiap 5 detik
@@ -2953,10 +2955,16 @@ Terima kasih.`;
       }
     }
 
-    // [OPT] Memanggil data langsung dari server tanpa limitasi 300 baris
+    // [OPT] Gunakan getReportAndKasData() — satu GAS call yang menggabungkan getReportData + getKasPeriode
+    // Mengeliminasi nested GAS call yang sebelumnya menyebabkan 2 round-trip serial (~2-10 detik)
     google.script.run
-      .withSuccessHandler(function (data) {
-        let filtered = data || [];
+      .withSuccessHandler(function (combined) {
+        showLoading(false);
+        if (!combined || !combined.success) {
+          showToast("Gagal mengambil data laporan.", "error");
+          return;
+        }
+        let filtered = combined.report || [];
         currentReportData = filtered;
 
         const labels = [];
@@ -3007,7 +3015,7 @@ Terima kasih.`;
                 paymentMethodCount[method] =
                   (paymentMethodCount[method] || 0) + dp;
             } else {
-              grouped[dateKey] = grouped[dateKey] || 0; // Inisialisasi titik 0
+              grouped[dateKey] = grouped[dateKey] || 0;
             }
             countGrouped[dateKey] = (countGrouped[dateKey] || 0) + 1;
 
@@ -3072,37 +3080,28 @@ Terima kasih.`;
           custData,
           paymentMethodCount,
         );
-        
-        // Fetch kas data for the same period
-        google.script.run
-          .withSuccessHandler(function (kasRes) {
-            showLoading(false);
-            if (kasRes && kasRes.success) {
-              const uAwal = kasRes.total_uang_awal || 0;
-              const tKeluar = kasRes.total_pengeluaran || 0;
-              const estSaldo = uAwal + totalRev - tKeluar;
-              
-              const elAwal = document.getElementById("laporanTotalUangAwal");
-              const elKeluar = document.getElementById("laporanTotalPengeluaran");
-              const elSaldo = document.getElementById("laporanEstimasiSaldo");
-              
-              if(elAwal) elAwal.innerText = "Rp " + uAwal.toLocaleString("id-ID");
-              if(elKeluar) elKeluar.innerText = "Rp " + tKeluar.toLocaleString("id-ID");
-              if(elSaldo) elSaldo.innerText = "Rp " + estSaldo.toLocaleString("id-ID");
-            }
-          })
-          .withFailureHandler(function (err) {
-            showLoading(false);
-            console.error("Gagal mengambil data kas periode", err);
-          })
-          .getKasPeriode(currentUser.token, startDate, endDate);
-          
+
+        // [OPT] Update kartu kas dari response yang sama — tidak perlu call server kedua
+        const kasRes = combined.kas;
+        if (kasRes && kasRes.success) {
+          const uAwal = kasRes.total_uang_awal || 0;
+          const tKeluar = kasRes.total_pengeluaran || 0;
+          const estSaldo = uAwal + totalRev - tKeluar;
+
+          const elAwal = document.getElementById("laporanTotalUangAwal");
+          const elKeluar = document.getElementById("laporanTotalPengeluaran");
+          const elSaldo = document.getElementById("laporanEstimasiSaldo");
+
+          if (elAwal) elAwal.innerText = "Rp " + uAwal.toLocaleString("id-ID");
+          if (elKeluar) elKeluar.innerText = "Rp " + tKeluar.toLocaleString("id-ID");
+          if (elSaldo) elSaldo.innerText = "Rp " + estSaldo.toLocaleString("id-ID");
+        }
       })
       .withFailureHandler(function (err) {
         showLoading(false);
         showToast("Gagal mengambil data laporan: " + err.message, "error");
       })
-      .getReportData(currentUser.token, startDate, endDate);
+      .getReportAndKasData(currentUser.token, startDate, endDate);
   }
 
   // [FIX] CSV escape helper — handle koma, kutip ganda, dan newline dalam data
@@ -4134,11 +4133,12 @@ Terima kasih.`;
   function fetchKasHarian() {
     const filterInput = document.getElementById("kasDateFilter");
     const dateStr = filterInput ? filterInput.value : "";
-    
-    showLoading(true);
+
+    // [OPT] Ganti full-screen loading overlay dengan inline indicator — UI tidak terblokir
+    const kasCard = document.getElementById("kasUangAwal");
+    if (kasCard) kasCard.innerText = "Memuat...";
     google.script.run
       .withSuccessHandler(function (res) {
-        showLoading(false);
         if (res && res.success) {
           // Update cards
           document.getElementById("kasUangAwal").innerText = "Rp " + res.uang_awal.toLocaleString("id-ID");
@@ -4154,7 +4154,7 @@ Terima kasih.`;
         }
       })
       .withFailureHandler(function (err) {
-        showLoading(false);
+        if (kasCard) kasCard.innerText = "Error";
         showToast("Error koneksi: " + err.message, "error");
       })
       .getKasHarian(currentUser.token, dateStr);
@@ -4178,10 +4178,7 @@ Terima kasih.`;
           showToast(res.isUpdate ? "Uang awal diperbarui!" : "Uang awal berhasil disimpan!");
           document.getElementById("inputUangAwal").value = "";
           fetchKasHarian();
-          // Update overview widgets if we are on today's date
-          if (!dateStr || dateStr === new Date().toISOString().split('T')[0]) {
-             loadTransactions(true); // refresh dashboard cards
-          }
+          // [OPT] Hapus loadTransactions(true) — data transaksi tidak berubah saat simpan uang awal
         } else {
           showToast(res ? res.message : "Gagal menyimpan uang awal.", "error");
         }
@@ -4219,9 +4216,7 @@ Terima kasih.`;
           document.getElementById("inputPengeluaranKet").value = "";
           document.getElementById("inputPengeluaranJumlah").value = "";
           fetchKasHarian();
-          if (!dateStr || dateStr === new Date().toISOString().split('T')[0]) {
-             loadTransactions(true);
-          }
+          // [OPT] Hapus loadTransactions(true) — data transaksi tidak berubah saat catat pengeluaran
         } else {
           showToast(res ? res.message : "Gagal menyimpan pengeluaran.", "error");
         }
@@ -4274,7 +4269,7 @@ Terima kasih.`;
         if (res && res.success) {
           showToast("Pengeluaran berhasil dihapus!");
           fetchKasHarian();
-          loadTransactions(true);
+          // [OPT] Hapus loadTransactions(true) — data transaksi tidak berubah saat hapus pengeluaran
         } else {
           showToast(res ? res.message : "Gagal menghapus.", "error");
         }
