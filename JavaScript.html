@@ -4069,7 +4069,7 @@ Terima kasih.`;
         btnSave.innerHTML = origHtml;
         showToast("Error koneksi: " + err.message, "error");
       })
-      .saveUserAccount(currentUser.token, newUsername, pass, role, nama);
+      .saveUserAccount(currentUser.token, !!oldUsername, oldUsername, newUsername, pass, role, nama);
   }
 
   function deleteUserUI(username) {

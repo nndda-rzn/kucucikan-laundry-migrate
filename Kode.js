@@ -1032,22 +1032,26 @@ function setupWarmupTrigger() {
 // ==========================================
 
 function getUsersList(token) {
-  validateAdminSession_(token);
-  const sheet = getSheet("users");
-  const data = sheet.getDataRange().getValues();
-  if (data.length <= 1) return [];
-  
-  let users = [];
-  for (let i = 1; i < data.length; i++) {
-    if (String(data[i][0]).trim() !== "") {
-      users.push({
-        username: String(data[i][0]),
-        role: String(data[i][2]),
-        nama: String(data[i][3])
-      });
+  try {
+    validateAdminSession_(token);
+    const sheet = getSheet("users");
+    const data = sheet.getDataRange().getValues();
+    if (data.length <= 1) return { success: true, data: [] };
+    
+    let users = [];
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][0]).trim() !== "") {
+        users.push({
+          username: String(data[i][0]),
+          role: String(data[i][2]),
+          nama: String(data[i][3])
+        });
+      }
     }
+    return { success: true, data: users };
+  } catch (e) {
+    return { success: false, message: e.message };
   }
-  return users;
 }
 
 function saveUserAccount(token, isEdit, oldUsername, username, password, role, nama) {
