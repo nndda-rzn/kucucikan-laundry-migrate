@@ -1199,6 +1199,24 @@
               </svg>
               <span class="whitespace-nowrap">Pengaturan Sistem</span>
             </button>
+            <button
+              id="adminUsersDesktop"
+              onclick="showSection('pegawai')"
+              class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all nav-btn text-slate-500 hover:bg-slate-50 hover:text-slate-800 font-medium group hidden mb-1"
+            >
+              <div
+                class="nav-indicator absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-blue-600 rounded-r-md hidden"
+              ></div>
+              <svg
+                class="w-5 h-5 flex-shrink-0 text-slate-400 group-hover:text-blue-500 transition-colors"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+              </svg>
+              <span class="whitespace-nowrap">Kelola Pegawai</span>
+            </button>
           </div>
         </div>
 
@@ -3231,6 +3249,65 @@ Teks preview muncul di sini...</pre
                     </div>
                   </div>
                 </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div
+          id="section-pegawai"
+          class="section section-animate hidden w-full max-w-7xl mx-auto"
+        >
+          <div class="flex flex-col lg:flex-row gap-6 lg:gap-8">
+            <div class="w-full lg:w-1/3">
+              <div
+                class="bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-slate-100 sticky top-4"
+                id="formUserContainer"
+              >
+                <h3
+                  id="titleUser"
+                  class="text-xl font-black mb-6 flex items-center gap-3 text-slate-900"
+                >
+                  <div class="w-2 h-6 bg-blue-600 rounded-full"></div>
+                  Tambah Pegawai
+                </h3>
+                <div class="space-y-5">
+                  <div class="relative">
+                    <label class="text-[10px] font-bold text-slate-500 ml-1 uppercase tracking-widest mb-1.5 block">Username *</label>
+                    <input type="text" id="newUsername" placeholder="Misal: andi_kasir" class="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl outline-none font-semibold text-sm focus:bg-white focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all" />
+                    <input type="hidden" id="oldUsername" />
+                  </div>
+                  <div class="relative">
+                    <label class="text-[10px] font-bold text-slate-500 ml-1 uppercase tracking-widest mb-1.5 block">Password *</label>
+                    <input type="password" id="newUserPass" placeholder="Kosongkan jika tidak diubah" class="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl outline-none font-semibold text-sm focus:bg-white focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all" />
+                  </div>
+                  <div class="relative">
+                    <label class="text-[10px] font-bold text-slate-500 ml-1 uppercase tracking-widest mb-1.5 block">Nama Panggilan *</label>
+                    <input type="text" id="newUserNama" placeholder="Misal: Andi" class="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl outline-none font-semibold text-sm focus:bg-white focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all" />
+                  </div>
+                  <div>
+                    <label class="text-[10px] font-bold text-slate-500 ml-1 uppercase tracking-widest mb-1.5 block">Hak Akses (Role)</label>
+                    <select id="newUserRole" class="w-full px-5 py-3.5 bg-slate-50 border border-slate-200 rounded-xl outline-none font-semibold text-sm status-select focus:bg-white focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all">
+                      <option value="kasir">Kasir</option>
+                      <option value="admin">Admin</option>
+                    </select>
+                  </div>
+                  <div class="flex gap-3 mt-4 pt-6 border-t border-slate-100">
+                    <button id="btnCancelUser" onclick="cancelEditUser()" class="hidden flex-1 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold py-4 rounded-xl transition-all active:scale-95 text-sm border border-slate-200">Batal</button>
+                    <button id="btnSaveUser" onclick="saveUser()" class="flex-[2] bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl shadow-lg shadow-blue-600/20 transition-all active:scale-95 text-sm flex justify-center items-center gap-2">Simpan Pegawai</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="w-full lg:w-2/3">
+              <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+                <h3 class="text-xl font-black text-slate-900 flex items-center gap-3 whitespace-nowrap">
+                  <div class="w-2 h-6 bg-blue-600 rounded-full"></div>
+                  Daftar Pegawai
+                </h3>
+              </div>
+              <div id="listUsers" class="flex flex-col gap-3 pb-6">
+                <!-- User list will be populated here -->
               </div>
             </div>
           </div>

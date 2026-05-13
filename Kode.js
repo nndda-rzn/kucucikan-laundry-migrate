@@ -5,7 +5,9 @@
 // [SEC] DB_ID dimuat dari Script Properties agar tidak terekspos di source code.
 // Jalankan setupScriptProperties() sekali untuk menyimpan ID ke properties.
 // Fallback ke hardcoded ID untuk backward compatibility.
+let _dbIdCache = null;
 function getDbId_() {
+  if (_dbIdCache) return _dbIdCache;
   const props = PropertiesService.getScriptProperties();
   let dbId = props.getProperty("DB_ID");
   if (!dbId) {
@@ -13,6 +15,7 @@ function getDbId_() {
     dbId = "1_3qq0iZyn8dF7YwY0Y0qyyAtXu2n8tOKdpFuW1qkAzY";
     props.setProperty("DB_ID", dbId);
   }
+  _dbIdCache = dbId;
   return dbId;
 }
 
@@ -57,7 +60,7 @@ function getSS() {
 }
 
 function getSheet(name) {
-  const ss = SpreadsheetApp.openById(getDbId_());
+  const ss = getSS();
   if (!ss) throw new Error("Kesalahan internal: Database tidak ditemukan.");
   const sheet = ss.getSheetByName(name);
   if (!sheet)
@@ -1022,5 +1025,107 @@ function setupWarmupTrigger() {
       ScriptApp.deleteTrigger(triggers[i]);
     }
   }
-  ScriptApp.newTrigger("warmup").timeBased().everyMinutes(5).create();
+}
+
+// ==========================================
+// 11. MANAJEMEN PENGGUNA (ADMIN ONLY)
+// ==========================================
+
+function getUsersList(token) {
+  validateAdminSession_(token);
+  const sheet = getSheet("users");
+  const data = sheet.getDataRange().getValues();
+  if (data.length <= 1) return [];
+  
+  let users = [];
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][0]).trim() !== "") {
+      users.push({
+        username: String(data[i][0]),
+        role: String(data[i][2]),
+        nama: String(data[i][3])
+      });
+    }
+  }
+  return users;
+}
+
+function saveUserAccount(token, isEdit, oldUsername, username, password, role, nama) {
+  validateAdminSession_(token);
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(3000);
+    const sheet = getSheet("users");
+    const data = sheet.getDataRange().getValues();
+    const cleanUsername = String(username).trim().toLowerCase();
+    
+    if (!isEdit) {
+      for (let i = 1; i < data.length; i++) {
+        if (String(data[i][0]).trim().toLowerCase() === cleanUsername) {
+          return { success: false, message: "Username sudah terdaftar!" };
+        }
+      }
+      const hashedPassword = hashPassword(password);
+      sheet.appendRow([cleanUsername, hashedPassword, role, nama]);
+      return { success: true, message: "Akun berhasil dibuat." };
+    } else {
+      const cleanOldUsername = String(oldUsername).trim().toLowerCase();
+      for (let i = 1; i < data.length; i++) {
+        if (String(data[i][0]).trim().toLowerCase() === cleanOldUsername) {
+          const row = i + 1;
+          
+          if (cleanUsername !== cleanOldUsername) {
+             for (let j = 1; j < data.length; j++) {
+               if (j !== i && String(data[j][0]).trim().toLowerCase() === cleanUsername) {
+                 return { success: false, message: "Username baru sudah terdaftar!" };
+               }
+             }
+          }
+          
+          sheet.getRange(row, 1).setValue(cleanUsername);
+          if (password && password.trim() !== "") {
+             sheet.getRange(row, 2).setValue(hashPassword(password));
+          }
+          sheet.getRange(row, 3).setValue(role);
+          sheet.getRange(row, 4).setValue(nama);
+          
+          return { success: true, message: "Akun berhasil diupdate." };
+        }
+      }
+      return { success: false, message: "Akun tidak ditemukan!" };
+    }
+  } catch (e) {
+    logError("saveUserAccount", e.message);
+    return { success: false, message: "Gagal menyimpan akun: " + e.message };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function deleteUserAccount(token, username) {
+  validateAdminSession_(token);
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(3000);
+    const sheet = getSheet("users");
+    const data = sheet.getDataRange().getValues();
+    const cleanUsername = String(username).trim().toLowerCase();
+    
+    if (cleanUsername === "admin") {
+      return { success: false, message: "Akun utama admin tidak boleh dihapus!" };
+    }
+    
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][0]).trim().toLowerCase() === cleanUsername) {
+        sheet.deleteRow(i + 1);
+        return { success: true, message: "Akun berhasil dihapus." };
+      }
+    }
+    return { success: false, message: "Akun tidak ditemukan." };
+  } catch (e) {
+    logError("deleteUserAccount", e.message);
+    return { success: false, message: "Gagal menghapus akun: " + e.message };
+  } finally {
+    lock.releaseLock();
+  }
 }
