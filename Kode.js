@@ -746,10 +746,17 @@ function deleteCustomerData(token, id) {
 
 function getPackages(token) {
   validateSession_(token);
+  // [OPT] Cache paket layanan — jarang berubah, cache 10 menit di ScriptCache
+  const cacheKey = "packages_list";
+  const cache = CacheService.getScriptCache();
+  const cached = cache.get(cacheKey);
+  if (cached) {
+    try { return JSON.parse(cached); } catch(e) {}
+  }
   const sheet = getSheet("packages");
   const rawData = sheet.getDataRange().getValues();
   if (rawData.length <= 1) return [];
-  return rawData
+  const result = rawData
     .slice(1)
     .filter((r) => r.join("").trim() !== "")
     .map((r) => ({
@@ -761,6 +768,8 @@ function getPackages(token) {
       kategori: String(r[5] || ""),
       status: String(r[6] || "Aktif"),
     }));
+  try { cache.put(cacheKey, JSON.stringify(result), 600); } catch(e) {}
+  return result;
 }
 
 function addPackage(token, nama, harga, durasi, satuan, kategori, status) {
@@ -777,6 +786,8 @@ function addPackage(token, nama, harga, durasi, satuan, kategori, status) {
       kategori || "",
       status || "Aktif",
     ]);
+    // [OPT] Invalidate package cache setelah write
+    CacheService.getScriptCache().remove("packages_list");
     return { success: true };
   } catch (e) {
     return { success: false, message: e.message };
@@ -816,6 +827,8 @@ function updatePackage(
               newStatus || "Aktif",
             ],
           ]);
+        // [OPT] Invalidate package cache setelah write
+        CacheService.getScriptCache().remove("packages_list");
         return { success: true };
       }
     }
@@ -839,6 +852,8 @@ function updatePackageStatus(token, id, newStatus) {
     for (let i = 0; i < ids.length; i++) {
       if (ids[i][0] === id) {
         sheet.getRange(i + 2, 7).setValue(newStatus);
+        // [OPT] Invalidate package cache setelah status berubah
+        CacheService.getScriptCache().remove("packages_list");
         return { success: true };
       }
     }
@@ -1241,6 +1256,28 @@ function getReportAndKasData(token, startDateStr, endDateStr) {
   } catch (e) {
     logError("getReportAndKasData", e.message);
     return { success: false, message: "Gagal mengambil data laporan: " + e.message };
+  }
+}
+
+// [OPT] Dashboard Bundle: satu GAS call untuk menggantikan 3 call saat login
+// (getTransactions + getSettings + getPackages → 1 getDashboardBundle)
+// Menghemat 2 round-trip GAS (~2-10 detik) setiap kali pengguna login atau reload.
+function getDashboardBundle(token) {
+  validateSession_(token);
+  try {
+    const transactions = getTransactions(token);
+    const packages = getPackages(token);
+    // Settings sudah di-cache via CacheService — overhead-nya minimal
+    const settings = getSettings();
+    return {
+      success: true,
+      transactions: transactions,
+      packages: packages,
+      settings: settings
+    };
+  } catch (e) {
+    logError("getDashboardBundle", e.message);
+    return { success: false, message: "Gagal mengambil data dashboard: " + e.message };
   }
 }
 

@@ -565,6 +565,65 @@
       showSection("overview");
       fetchCustomers();
 
+      // [OPT] WAVE 2: getDashboardBundle — 1 GAS call menggantikan 3 serial call
+      // (loadSettings + loadTransactions + fetchPaket) → getDashboardBundle
+      // Menghemat ~2-8 detik setiap login/reload sesi
+      showLoading(true);
+      google.script.run
+        .withSuccessHandler(function(bundle) {
+          showLoading(false);
+          if (bundle && bundle.success) {
+            // Proses settings
+            const settingsData = bundle.settings;
+            if (settingsData) {
+              settingsData._ts = Date.now();
+              try {
+                localStorage.setItem("l_premium_settings_cache", JSON.stringify(settingsData));
+              } catch(e) {}
+              applySettingsToUI(settingsData);
+            }
+            // Proses transaksi
+            const txData = bundle.transactions;
+            if (txData) {
+              allTransactions = txData;
+              transactionsCacheTime = Date.now();
+              updateOverviewStats();
+              updateRecentActivity();
+              const refreshEl = document.getElementById("lastRefresh");
+              if (refreshEl) refreshEl.innerText = "Diperbarui: " + new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
+            }
+            // Proses paket
+            const pkgData = bundle.packages;
+            if (pkgData) {
+              allPackages = pkgData;
+              const sel = document.getElementById("selectPaket");
+              if (sel) {
+                let selHtml = '<option value="" disabled selected>-- Pilih Layanan --</option>';
+                for (let i = 0; i < pkgData.length; i++) {
+                  const p = pkgData[i];
+                  if (p.status === "Nonaktif") continue;
+                  const safeSat = escapeHTML(p.satuan || "Kg");
+                  selHtml += `<option value="${escapeHTML(p.nama)}" data-id="${escapeHTML(p.id)}" data-harga="${p.harga}" data-satuan="${safeSat}" data-durasi="${escapeHTML(p.durasi || 0)}">${escapeHTML(p.nama)} (Rp ${parseInt(p.harga).toLocaleString("id-ID")} / ${safeSat})</option>`;
+                }
+                sel.innerHTML = selHtml;
+              }
+            }
+          } else {
+            // Fallback: panggil individual jika bundle gagal
+            loadSettings();
+            loadTransactions(true);
+            fetchPaket();
+          }
+        })
+        .withFailureHandler(function(err) {
+          showLoading(false);
+          // Fallback ke method lama jika bundle call gagal
+          loadSettings();
+          loadTransactions(true);
+          fetchPaket();
+        })
+        .getDashboardBundle(currentUser.token);
+
       // [OPT] Auto-refresh dashboard setiap 1 menit (multi-kasir sync)
       if (autoRefreshInterval) clearInterval(autoRefreshInterval);
       autoRefreshInterval = setInterval(function () {
