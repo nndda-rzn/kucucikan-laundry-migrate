@@ -179,7 +179,7 @@ function verifyPassword(inputPassword, dbPassword) {
 
 function setupDatabase() {
   const ss = SpreadsheetApp.openById(getDbId_());
-  const sheets = ["users", "packages", "transactions", "settings", "customers"];
+  const sheets = ["users", "packages", "transactions", "settings", "customers", "kas_awal", "pengeluaran"];
   sheets.forEach((name) => {
     let sheet = ss.getSheetByName(name);
     if (!sheet) {
@@ -232,6 +232,10 @@ function setupDatabase() {
         sheet.appendRow(["nota_footer", "Terima kasih!"]);
       } else if (name === "customers") {
         sheet.appendRow(["id", "nama", "whatsapp", "terakhir_order"]);
+      } else if (name === "kas_awal") {
+        sheet.appendRow(["tanggal", "nominal", "kasir"]);
+      } else if (name === "pengeluaran") {
+        sheet.appendRow(["id", "tanggal", "keterangan", "kategori", "jumlah", "kasir"]);
       }
     } else if (name === "packages") {
       // Migration: tambah kolom kategori & status jika belum ada
@@ -919,6 +923,209 @@ function deletePromosSheet() {
     return "Sheet promos tidak ditemukan.";
   } catch (e) {
     return "Gagal hapus: " + e.message;
+  }
+}
+
+// ==========================================
+// MANAJEMEN KAS HARIAN
+// ==========================================
+
+function setupKasSheet_() {
+  const ss = SpreadsheetApp.openById(getDbId_());
+  if (!ss.getSheetByName("kas_awal")) {
+    const s1 = ss.insertSheet("kas_awal");
+    s1.appendRow(["tanggal", "nominal", "kasir"]);
+  }
+  if (!ss.getSheetByName("pengeluaran")) {
+    const s2 = ss.insertSheet("pengeluaran");
+    s2.appendRow(["id", "tanggal", "keterangan", "kategori", "jumlah", "kasir"]);
+  }
+}
+
+function saveUangAwal(token, nominal, dateStr) {
+  const session = validateSession_(token);
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(3000);
+    setupKasSheet_();
+    const sheet = getSheet("kas_awal");
+    const data = sheet.getDataRange().getValues();
+    const targetDate = dateStr ? new Date(dateStr) : new Date();
+    targetDate.setHours(0, 0, 0, 0);
+    
+    // Cari apakah sudah ada uang awal untuk tanggal yang sama dan kasir yang sama
+    let foundRow = -1;
+    for (let i = 1; i < data.length; i++) {
+      const rowDate = new Date(data[i][0]);
+      rowDate.setHours(0, 0, 0, 0);
+      if (rowDate.getTime() === targetDate.getTime() && data[i][2] === session.username) {
+        foundRow = i + 1;
+        break;
+      }
+    }
+    
+    if (foundRow !== -1) {
+      sheet.getRange(foundRow, 2).setValue(nominal);
+      return { success: true, isUpdate: true };
+    } else {
+      sheet.appendRow([targetDate.toISOString(), nominal, session.username]);
+      return { success: true, isUpdate: false };
+    }
+  } catch (e) {
+    logError("saveUangAwal", e.message);
+    return { success: false, message: "Gagal menyimpan uang awal: " + e.message };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function getKasHarian(token, tanggalStr) {
+  validateSession_(token); // both admin and kasir can view overview, but let's allow fetching data
+  try {
+    setupKasSheet_();
+    const targetDate = tanggalStr ? new Date(tanggalStr) : new Date();
+    targetDate.setHours(0, 0, 0, 0);
+    
+    // 1. Ambil Uang Awal
+    let uangAwal = 0;
+    const sheetKas = getSheet("kas_awal");
+    const dataKas = sheetKas.getDataRange().getValues();
+    for (let i = 1; i < dataKas.length; i++) {
+      const rowDate = new Date(dataKas[i][0]);
+      rowDate.setHours(0, 0, 0, 0);
+      if (rowDate.getTime() === targetDate.getTime()) {
+        uangAwal += parseInt(dataKas[i][1]) || 0;
+      }
+    }
+    
+    // 2. Ambil Pengeluaran
+    let pengeluaranList = [];
+    let totalPengeluaran = 0;
+    const sheetPengeluaran = getSheet("pengeluaran");
+    const dataPengeluaran = sheetPengeluaran.getDataRange().getValues();
+    for (let i = 1; i < dataPengeluaran.length; i++) {
+      if(dataPengeluaran[i].join("").trim() === "") continue;
+      const rowDate = new Date(dataPengeluaran[i][1]);
+      rowDate.setHours(0, 0, 0, 0);
+      if (rowDate.getTime() === targetDate.getTime()) {
+        const nominal = parseInt(dataPengeluaran[i][4]) || 0;
+        pengeluaranList.push({
+          id: dataPengeluaran[i][0],
+          tanggal: dataPengeluaran[i][1],
+          keterangan: dataPengeluaran[i][2],
+          kategori: dataPengeluaran[i][3],
+          jumlah: nominal,
+          kasir: dataPengeluaran[i][5]
+        });
+        totalPengeluaran += nominal;
+      }
+    }
+    
+    return { 
+      success: true, 
+      uang_awal: uangAwal, 
+      pengeluaran: pengeluaranList, 
+      total_pengeluaran: totalPengeluaran 
+    };
+  } catch (e) {
+    logError("getKasHarian", e.message);
+    return { success: false, message: "Gagal mengambil data kas: " + e.message };
+  }
+}
+
+function savePengeluaran(token, keterangan, kategori, jumlah, dateStr) {
+  const session = validateSession_(token);
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(3000);
+    setupKasSheet_();
+    const sheet = getSheet("pengeluaran");
+    const dateToSave = dateStr ? new Date(dateStr) : new Date();
+    // Use current time if date is today, else use 12:00 of that date
+    if (dateStr) {
+      const today = new Date();
+      if (dateToSave.toDateString() === today.toDateString()) {
+         dateToSave.setHours(today.getHours(), today.getMinutes(), today.getSeconds());
+      } else {
+         dateToSave.setHours(12, 0, 0);
+      }
+    }
+    
+    const newId = generateId("PGL");
+    sheet.appendRow([newId, dateToSave.toISOString(), keterangan, kategori, jumlah, session.username]);
+    return { success: true, id: newId };
+  } catch (e) {
+    logError("savePengeluaran", e.message);
+    return { success: false, message: "Gagal menyimpan pengeluaran: " + e.message };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function deletePengeluaran(token, id) {
+  validateAdminSession_(token); // Only Admin can delete
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(3000);
+    const sheet = getSheet("pengeluaran");
+    const data = sheet.getDataRange().getValues();
+    for (let i = 1; i < data.length; i++) {
+      if (data[i][0] === id) {
+        sheet.deleteRow(i + 1);
+        return { success: true };
+      }
+    }
+    return { success: false, message: "Data tidak ditemukan." };
+  } catch (e) {
+    logError("deletePengeluaran", e.message);
+    return { success: false, message: "Gagal menghapus pengeluaran: " + e.message };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function getKasPeriode(token, startDateStr, endDateStr) {
+  validateAdminSession_(token);
+  try {
+    setupKasSheet_();
+    
+    let startD = startDateStr ? new Date(startDateStr) : null;
+    if (startD) startD.setHours(0, 0, 0, 0);
+
+    let endD = endDateStr ? new Date(endDateStr) : null;
+    if (endD) endD.setHours(23, 59, 59, 999);
+    
+    let totalUangAwal = 0;
+    const sheetKas = getSheet("kas_awal");
+    const dataKas = sheetKas.getDataRange().getValues();
+    for (let i = 1; i < dataKas.length; i++) {
+      const rowDate = new Date(dataKas[i][0]);
+      if (isNaN(rowDate)) continue;
+      if (startD && rowDate < startD) continue;
+      if (endD && rowDate > endD) continue;
+      totalUangAwal += parseInt(dataKas[i][1]) || 0;
+    }
+    
+    let totalPengeluaran = 0;
+    const sheetPengeluaran = getSheet("pengeluaran");
+    const dataPengeluaran = sheetPengeluaran.getDataRange().getValues();
+    for (let i = 1; i < dataPengeluaran.length; i++) {
+      if(dataPengeluaran[i].join("").trim() === "") continue;
+      const rowDate = new Date(dataPengeluaran[i][1]);
+      if (isNaN(rowDate)) continue;
+      if (startD && rowDate < startD) continue;
+      if (endD && rowDate > endD) continue;
+      totalPengeluaran += parseInt(dataPengeluaran[i][4]) || 0;
+    }
+    
+    return { 
+      success: true, 
+      total_uang_awal: totalUangAwal, 
+      total_pengeluaran: totalPengeluaran 
+    };
+  } catch (e) {
+    logError("getKasPeriode", e.message);
+    return { success: false, message: "Gagal mengambil data kas periode: " + e.message };
   }
 }
 
