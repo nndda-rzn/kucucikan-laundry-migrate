@@ -558,6 +558,9 @@
       document
         .getElementById("adminSettingsDesktop")
         .classList.toggle("hidden", !isAdmin);
+      document
+        .getElementById("adminUsersDesktop")
+        .classList.toggle("hidden", !isAdmin);
       // FITUR PROMO TELAH DIHAPUS
 
       showSection("overview");
@@ -823,6 +826,7 @@
         laporan: "adminLaporanDesktop",
         paket: "adminMenuDesktop",
         settings: "adminSettingsDesktop",
+        pegawai: "adminUsersDesktop",
       };
       const adminBtnId = adminMap[name];
       if (adminBtnId) {
