@@ -1118,6 +1118,30 @@
             </svg>
             <span class="whitespace-nowrap">Daftar Pelanggan</span>
           </button>
+          <button
+            id="btn-kas"
+            onclick="showSection('kas')"
+            class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all nav-btn text-slate-500 hover:bg-slate-50 hover:text-slate-800 font-medium group"
+          >
+            <div
+              class="nav-indicator absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-blue-600 rounded-r-md hidden"
+            ></div>
+            <svg
+              class="w-5 h-5 flex-shrink-0 text-slate-400 group-hover:text-blue-500 transition-colors"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="1.5"
+                d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"
+              ></path>
+            </svg>
+            <span class="whitespace-nowrap">Manajemen Kas</span>
+          </button>
+
 
           <div class="pt-6 pb-2">
             <div class="flex items-center gap-3 px-3 mb-3">
@@ -1154,29 +1178,6 @@
               <span class="whitespace-nowrap">Analisis Penjualan</span>
             </button>
 
-            <button
-              id="adminKasDesktop"
-              onclick="showSection('kas')"
-              class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all nav-btn text-slate-500 hover:bg-slate-50 hover:text-slate-800 font-medium group hidden mb-1"
-            >
-              <div
-                class="nav-indicator absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-blue-600 rounded-r-md hidden"
-              ></div>
-              <svg
-                class="w-5 h-5 flex-shrink-0 text-slate-400 group-hover:text-blue-500 transition-colors"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="1.5"
-                  d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"
-                ></path>
-              </svg>
-              <span class="whitespace-nowrap">Manajemen Kas</span>
-            </button>
             <button
               id="adminMenuDesktop"
               onclick="showSection('paket')"
