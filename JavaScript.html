@@ -549,18 +549,17 @@
           );
       }
       const isAdmin = currentUser.role === "admin";
-      document
-        .getElementById("adminMenuDesktop")
-        .classList.toggle("hidden", !isAdmin);
-      document
-        .getElementById("adminLaporanDesktop")
-        .classList.toggle("hidden", !isAdmin);
-      document
-        .getElementById("adminSettingsDesktop")
-        .classList.toggle("hidden", !isAdmin);
-      document
-        .getElementById("adminUsersDesktop")
-        .classList.toggle("hidden", !isAdmin);
+      const menuDesk = document.getElementById("adminMenuDesktop");
+      if (menuDesk) menuDesk.classList.toggle("hidden", !isAdmin);
+      
+      const lapDesk = document.getElementById("adminLaporanDesktop");
+      if (lapDesk) lapDesk.classList.toggle("hidden", !isAdmin);
+      
+      const setDesk = document.getElementById("adminSettingsDesktop");
+      if (setDesk) setDesk.classList.toggle("hidden", !isAdmin);
+      
+      const userDesk = document.getElementById("adminUsersDesktop");
+      if (userDesk) userDesk.classList.toggle("hidden", !isAdmin);
       // FITUR PROMO TELAH DIHAPUS
 
       showSection("overview");
