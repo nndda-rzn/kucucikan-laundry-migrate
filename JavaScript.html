@@ -863,6 +863,9 @@
       document.getElementById("searchCustomerDB").value = "";
       fetchCustomers();
     }
+    if (name === "pegawai") {
+      fetchUsers();
+    }
     if (name === "history" || name === "overview") {
       const sH = document.getElementById("searchHistory");
       if (sH) sH.value = "";
@@ -971,6 +974,8 @@
       performDeleteCustomer(deleteTargetId);
     } else if (deleteTargetType === "transaction") {
       performDeleteTransaction(deleteTargetId);
+    } else if (deleteTargetType === "user") {
+      performDeleteUser(deleteTargetId);
     }
   }
 
@@ -3897,4 +3902,197 @@ Terima kasih.`;
       }
     }
   });
+  // 18. KELOLA PEGAWAI
+  let allUsersList = [];
+  
+  function fetchUsers() {
+    const cont = document.getElementById("listUsers");
+    if (cont && allUsersList.length === 0) {
+      cont.innerHTML = `
+        <div class="flex flex-col gap-3">
+          ${[1, 2].map(() => `
+            <div class="bg-white p-4 md:p-5 rounded-2xl border border-slate-100 animate-pulse flex items-center gap-4">
+              <div class="w-12 h-12 rounded-full bg-slate-200 flex-shrink-0"></div>
+              <div class="flex-1 space-y-2">
+                <div class="h-4 bg-slate-200 rounded-lg w-1/3"></div>
+                <div class="h-3 bg-slate-100 rounded-lg w-1/2"></div>
+              </div>
+            </div>`).join('')}
+        </div>`;
+    }
+    google.script.run
+      .withSuccessHandler(function (data) {
+        if (data && data.success) {
+          allUsersList = data.data;
+          renderUserGrid(allUsersList);
+        } else {
+          showToast(data ? data.message : "Gagal mengambil data pegawai", "error");
+        }
+      })
+      .withFailureHandler(function (err) {
+        showToast("Error koneksi: " + err.message, "error");
+      })
+      .getUsersList(currentUser.token);
+  }
+
+  function renderUserGrid(users) {
+    const list = document.getElementById("listUsers");
+    if (!list) return;
+    if (!users || users.length === 0) {
+      list.innerHTML = `<div class="bg-white p-8 rounded-2xl border border-slate-100 text-center shadow-sm">
+        <svg class="w-12 h-12 text-slate-300 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
+        <p class="text-sm font-bold text-slate-500">Belum ada data pegawai.</p>
+      </div>`;
+      return;
+    }
+    
+    let html = "";
+    for (let i = 0; i < users.length; i++) {
+      const u = users[i];
+      const roleBadge = u.role === "admin" 
+        ? `<span class="bg-blue-100 text-blue-700 border border-blue-200 px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-widest">Admin</span>` 
+        : `<span class="bg-slate-100 text-slate-600 border border-slate-200 px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-widest">Kasir</span>`;
+      
+      const disableDelete = u.username === "admin" ? "disabled opacity-50 cursor-not-allowed" : "";
+      
+      html += `
+        <div class="bg-white p-4 md:p-5 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div class="flex items-center gap-4 w-full md:w-auto">
+            <div class="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-black text-lg flex-shrink-0">
+              ${escapeHTML(u.nama.charAt(0).toUpperCase())}
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center flex-wrap gap-2 mb-0.5">
+                <h5 class="font-black text-slate-900 text-sm md:text-base leading-tight truncate">${escapeHTML(u.nama)}</h5>
+                ${roleBadge}
+              </div>
+              <div class="flex items-center gap-2 text-[10px] md:text-xs font-bold text-slate-500">
+                <span>@${escapeHTML(u.username)}</span>
+              </div>
+            </div>
+          </div>
+          
+          <div class="flex items-center gap-2 w-full md:w-auto justify-end mt-2 md:mt-0 pt-3 md:pt-0 border-t md:border-t-0 border-slate-100">
+            <button onclick="editUserUI('${escapeHTML(u.username)}', '${escapeHTML(u.nama)}', '${escapeHTML(u.role)}')" class="text-slate-400 hover:text-amber-600 bg-slate-50 hover:bg-amber-50 p-2.5 rounded-lg transition-colors border border-slate-100 shadow-sm" title="Edit Pegawai"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg></button>
+            <button onclick="deleteUserUI('${escapeHTML(u.username)}')" class="text-slate-400 hover:text-red-600 bg-slate-50 hover:bg-red-50 p-2.5 rounded-lg transition-colors border border-slate-100 shadow-sm ${disableDelete}" ${disableDelete} title="Hapus Pegawai"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button>
+          </div>
+        </div>
+      `;
+    }
+    list.innerHTML = html;
+  }
+
+  function editUserUI(username, nama, role) {
+    document.getElementById("oldUsername").value = username;
+    document.getElementById("newUsername").value = username;
+    // Set field username to readonly during edit
+    document.getElementById("newUsername").readOnly = true;
+    document.getElementById("newUsername").classList.add("bg-slate-200", "cursor-not-allowed");
+    
+    document.getElementById("newUserNama").value = nama;
+    document.getElementById("newUserRole").value = role;
+    document.getElementById("newUserPass").value = "";
+    
+    document.getElementById("titleUser").innerHTML = `<div class="w-2 h-6 bg-amber-500 rounded-full"></div> Edit Pegawai`;
+    
+    const btnSave = document.getElementById("btnSaveUser");
+    btnSave.innerHTML = `<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg> Update Pegawai`;
+    btnSave.className = "flex-[2] bg-amber-500 hover:bg-amber-600 text-white font-bold py-4 rounded-xl shadow-lg shadow-amber-500/20 transition-all active:scale-95 text-sm flex justify-center items-center gap-2";
+    
+    document.getElementById("btnCancelUser").classList.remove("hidden");
+    
+    const formCont = document.getElementById("formUserContainer");
+    if(formCont) formCont.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  function cancelEditUser() {
+    document.getElementById("oldUsername").value = "";
+    document.getElementById("newUsername").value = "";
+    document.getElementById("newUsername").readOnly = false;
+    document.getElementById("newUsername").classList.remove("bg-slate-200", "cursor-not-allowed");
+    
+    document.getElementById("newUserNama").value = "";
+    document.getElementById("newUserRole").value = "kasir";
+    document.getElementById("newUserPass").value = "";
+    
+    document.getElementById("titleUser").innerHTML = `<div class="w-2 h-6 bg-blue-600 rounded-full"></div> Tambah Pegawai`;
+    
+    const btnSave = document.getElementById("btnSaveUser");
+    btnSave.innerHTML = `Simpan Pegawai`;
+    btnSave.className = "flex-[2] bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl shadow-lg shadow-blue-600/20 transition-all active:scale-95 text-sm flex justify-center items-center gap-2";
+    
+    document.getElementById("btnCancelUser").classList.add("hidden");
+  }
+
+  function saveUser() {
+    const oldUsername = document.getElementById("oldUsername").value.trim();
+    const newUsername = document.getElementById("newUsername").value.trim();
+    const pass = document.getElementById("newUserPass").value;
+    const nama = document.getElementById("newUserNama").value.trim();
+    const role = document.getElementById("newUserRole").value;
+    
+    if (!newUsername || !nama) {
+      showToast("Username dan Nama wajib diisi!", "error");
+      return;
+    }
+    if (!oldUsername && !pass) {
+      showToast("Password wajib diisi untuk pengguna baru!", "error");
+      return;
+    }
+    if (newUsername.includes(" ")) {
+      showToast("Username tidak boleh mengandung spasi!", "error");
+      return;
+    }
+    
+    const btnSave = document.getElementById("btnSaveUser");
+    const origHtml = btnSave.innerHTML;
+    btnSave.disabled = true;
+    btnSave.innerHTML = '<svg class="animate-spin w-5 h-5" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg> Menyimpan...';
+    
+    google.script.run
+      .withSuccessHandler(function(res) {
+        btnSave.disabled = false;
+        btnSave.innerHTML = origHtml;
+        if (res.success) {
+          showToast(!oldUsername ? "Pegawai baru ditambahkan!" : "Data pegawai diperbarui!");
+          cancelEditUser();
+          fetchUsers();
+        } else {
+          showToast(res.message || "Gagal menyimpan pegawai", "error");
+        }
+      })
+      .withFailureHandler(function(err) {
+        btnSave.disabled = false;
+        btnSave.innerHTML = origHtml;
+        showToast("Error koneksi: " + err.message, "error");
+      })
+      .saveUserAccount(currentUser.token, newUsername, pass, role, nama);
+  }
+
+  function deleteUserUI(username) {
+    if (username === "admin") {
+      showToast("Akun admin utama tidak dapat dihapus!", "error");
+      return;
+    }
+    showDeleteModal("user", username, "Hapus Pegawai @" + username + "?");
+  }
+  
+  function performDeleteUser(username) {
+    google.script.run
+      .withSuccessHandler(function(res) {
+        if (res.success) {
+          showToast("Pegawai berhasil dihapus!");
+          if (document.getElementById("oldUsername").value === username) {
+            cancelEditUser();
+          }
+          fetchUsers();
+        } else {
+          showToast(res.message || "Gagal menghapus pegawai", "error");
+        }
+      })
+      .withFailureHandler(function(err) {
+        showToast("Error koneksi: " + err.message, "error");
+      })
+      .deleteUserAccount(currentUser.token, username);
+  }
 </script>
