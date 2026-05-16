@@ -686,23 +686,26 @@
         .getDashboardBundle(currentUser.token);
 
       // [OPT] Auto-refresh dashboard setiap 1 menit (multi-kasir sync)
+      // [PERF] Smart polling: pause saat tab hidden, refresh ketika tab kembali aktif
       if (autoRefreshInterval) clearInterval(autoRefreshInterval);
-      autoRefreshInterval = setInterval(function () {
-        const onDash = !document
-          .getElementById("section-overview")
-          .classList.contains("hidden");
-        const onHist = !document
-          .getElementById("section-history")
-          .classList.contains("hidden");
-        const onLaporan = !document
-          .getElementById("section-laporan")
-          .classList.contains("hidden");
-          
+      const refreshIfRelevant = function () {
+        if (document.visibilityState === "hidden") return; // pause saat tab di background
+        const dashEl = document.getElementById("section-overview");
+        const histEl = document.getElementById("section-history");
+        const onDash = dashEl && !dashEl.classList.contains("hidden");
+        const onHist = histEl && !histEl.classList.contains("hidden");
         if (onDash || onHist) loadTransactions(true);
-        // [OPT] Nonaktifkan auto-refresh laporan — generateReport sudah 1 GAS call (berat),
-        // cukup dipanggil saat user membuka tab. Polling tiap menit tidak sebanding biayanya.
-        // if (onLaporan) generateReport(currentReportType, true);
-      }, 60000); // 1 menit
+      };
+      autoRefreshInterval = setInterval(refreshIfRelevant, 60000); // 1 menit
+      // [PERF] Saat tab kembali aktif setelah hidden, refresh sekali agar data fresh
+      if (!window._visibilityRefreshBound) {
+        window._visibilityRefreshBound = true;
+        document.addEventListener("visibilitychange", function () {
+          if (document.visibilityState === "visible") {
+            refreshIfRelevant();
+          }
+        });
+      }
 
       // [OPT] Draft auto-save setiap 5 detik
       if (draftSaveInterval) clearInterval(draftSaveInterval);
