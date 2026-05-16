@@ -179,7 +179,7 @@ function verifyPassword(inputPassword, dbPassword) {
 
 function setupDatabase() {
   const ss = SpreadsheetApp.openById(getDbId_());
-  const sheets = ["users", "packages", "transactions", "settings", "customers", "kas_awal", "pengeluaran"];
+  const sheets = ["users", "packages", "transactions", "settings", "customers", "kas_awal", "pengeluaran", "shifts"];
   sheets.forEach((name) => {
     let sheet = ss.getSheetByName(name);
     if (!sheet) {
@@ -223,7 +223,15 @@ function setupDatabase() {
           "estimasi_selesai",
           "metode_pembayaran",
           "status_pembayaran",
+          "metode_pelunasan",
+          "",
           "catatan",
+          "terbayar",
+          "items_json",
+          "tanggal_pelunasan",
+          "nominal_dp",
+          "nominal_pelunasan",
+          "shift_id",
         ]);
       } else if (name === "settings") {
         sheet.appendRow(["key", "value"]);
@@ -236,6 +244,21 @@ function setupDatabase() {
         sheet.appendRow(["tanggal", "nominal", "kasir"]);
       } else if (name === "pengeluaran") {
         sheet.appendRow(["id", "tanggal", "keterangan", "kategori", "jumlah", "kasir"]);
+      } else if (name === "shifts") {
+        sheet.appendRow([
+          "id",
+          "kasir",
+          "nama_kasir",
+          "waktu_mulai",
+          "waktu_selesai",
+          "modal_awal",
+          "total_transaksi",
+          "total_tunai",
+          "total_non_tunai",
+          "jumlah_order",
+          "status",
+          "catatan",
+        ]);
       }
     } else if (name === "packages") {
       // Migration: tambah kolom kategori & status jika belum ada
@@ -255,6 +278,14 @@ function setupDatabase() {
         if (lastRow > 1) {
           sheet.getRange(2, sCol, lastRow - 1, 1).setValue("Aktif");
         }
+      }
+    } else if (name === "transactions") {
+      // Migration: tambah kolom shift_id jika belum ada (kolom ke-22)
+      const lastCol = sheet.getLastColumn();
+      const headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+      if (headers.indexOf("shift_id") === -1) {
+        const sCol = sheet.getLastColumn() + 1;
+        sheet.getRange(1, sCol).setValue("shift_id");
       }
     }
   });
@@ -431,9 +462,16 @@ function getTransactions(token) {
 }
 
 function createTransaction(token, data) {
-  validateSession_(token);
+  const session = validateSession_(token);
   if (!data || !data.customer || !data.items_json)
     return { success: false, message: "Data tidak lengkap." };
+    
+  // Periksa shift aktif (WAJIB)
+  const activeShift = getActiveShift_(session.username);
+  if (!activeShift) {
+    return { success: false, message: "Anda belum membuka shift. Silakan buka shift terlebih dahulu." };
+  }
+
   const lock = LockService.getScriptLock();
   try {
     lock.waitLock(5000);
@@ -524,6 +562,7 @@ function createTransaction(token, data) {
       tanggalPelunasan,
       nominalDp,
       nominalPelunasan,
+      activeShift.id,
     ]);
 
     saveOrUpdateCustomer(data.kasir, data.customer, data.whatsapp || "", date);
@@ -1032,13 +1071,42 @@ function getKasHarian(token, tanggalStr) {
     
     // 1. Ambil Uang Awal
     let uangAwal = 0;
-    const sheetKas = getSheet("kas_awal");
-    const dataKas = sheetKas.getDataRange().getValues();
-    for (let i = 1; i < dataKas.length; i++) {
-      const rowDate = new Date(dataKas[i][0]);
-      rowDate.setHours(0, 0, 0, 0);
-      if (rowDate.getTime() === targetDate.getTime()) {
-        uangAwal += parseInt(dataKas[i][1]) || 0;
+    
+    // Cek apakah ada shift aktif untuk hari ini
+    let activeShift = getActiveShift_();
+    if (activeShift) {
+       const shiftDate = new Date(activeShift.waktu_mulai);
+       shiftDate.setHours(0, 0, 0, 0);
+       if (shiftDate.getTime() === targetDate.getTime()) {
+           uangAwal = parseInt(activeShift.modal_awal) || 0;
+       }
+    }
+    
+    // Fallback: Jika tidak ada shift aktif dari hari ini, coba cari dari shift yang sudah ditutup hari ini
+    if (uangAwal === 0) {
+      const sheetShifts = getSheet("shifts");
+      const dataShifts = sheetShifts.getDataRange().getValues();
+      // Cari shift terakhir di hari yang sama
+      for (let i = dataShifts.length - 1; i >= 1; i--) {
+        const rowDate = new Date(dataShifts[i][3]); // waktu_mulai
+        rowDate.setHours(0, 0, 0, 0);
+        if (rowDate.getTime() === targetDate.getTime()) {
+          uangAwal = parseInt(dataShifts[i][2]) || 0; // modal_awal
+          break; // Ambil yang paling terakhir saja
+        }
+      }
+    }
+    
+    // Backward compatibility: Tetap cek kas_awal lama jika shift tidak ada
+    if (uangAwal === 0) {
+      const sheetKas = getSheet("kas_awal");
+      const dataKas = sheetKas.getDataRange().getValues();
+      for (let i = 1; i < dataKas.length; i++) {
+        const rowDate = new Date(dataKas[i][0]);
+        rowDate.setHours(0, 0, 0, 0);
+        if (rowDate.getTime() === targetDate.getTime()) {
+          uangAwal += parseInt(dataKas[i][1]) || 0;
+        }
       }
     }
     
@@ -1281,23 +1349,160 @@ function getReportAndKasData(token, startDateStr, endDateStr) {
 // (getTransactions + getSettings + getPackages → 1 getDashboardBundle)
 // Menghemat 2 round-trip GAS (~2-10 detik) setiap kali pengguna login atau reload.
 function getDashboardBundle(token) {
-  validateSession_(token);
+  const session = validateSession_(token);
   try {
     const transactions = getTransactions(token);
     const packages = getPackages(token);
     const settings = getSettings();
     // [OPT] Sertakan customers dalam bundle — menggantikan fetchCustomers() terpisah saat startup
     const customers = getCustomers(token);
+    const activeShift = getActiveShift_(session.username);
     return {
       success: true,
       transactions: transactions,
       packages: packages,
       settings: settings,
-      customers: customers
+      customers: customers,
+      activeShift: activeShift
     };
   } catch (e) {
     logError("getDashboardBundle", e.message);
     return { success: false, message: "Gagal mengambil data dashboard: " + e.message };
+  }
+}
+
+// ==========================================
+// SHIFT MANAGEMENT
+// ==========================================
+
+function getActiveShift_(username) {
+  const sheet = getSheet("shifts");
+  const data = sheet.getDataRange().getValues();
+  for (let i = data.length - 1; i >= 1; i--) {
+    if (data[i][1] === username && data[i][10] === "Aktif") {
+      return {
+        id: data[i][0],
+        kasir: data[i][1],
+        nama_kasir: data[i][2],
+        waktu_mulai: data[i][3],
+        modal_awal: parseInt(data[i][5]) || 0,
+        status: data[i][10]
+      };
+    }
+  }
+  return null;
+}
+
+function getActiveShiftAPI(token) {
+  const session = validateSession_(token);
+  const activeShift = getActiveShift_(session.username);
+  return { success: true, data: activeShift };
+}
+
+function openShift(token, modalAwal) {
+  const session = validateSession_(token);
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(3000);
+    const existing = getActiveShift_(session.username);
+    if (existing) {
+      return { success: false, message: "Anda masih memiliki shift yang aktif." };
+    }
+    
+    const sheet = getSheet("shifts");
+    const id = generateId("SHF");
+    const now = new Date().toISOString();
+    
+    sheet.appendRow([
+      id,
+      session.username,
+      session.nama,
+      now,
+      "", 
+      parseInt(modalAwal) || 0,
+      0, 
+      0, 
+      0, 
+      0, 
+      "Aktif",
+      "" 
+    ]);
+    
+    // Fallback Kas Harian
+    saveUangAwal(token, parseInt(modalAwal) || 0, now);
+    
+    return { success: true, message: "Shift berhasil dibuka." };
+  } catch(e) {
+    logError("openShift", e.message);
+    return { success: false, message: "Gagal membuka shift: " + e.message };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function closeShift(token, shiftId, catatan) {
+  const session = validateSession_(token);
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(5000);
+    const sheet = getSheet("shifts");
+    const data = sheet.getDataRange().getValues();
+    let rowIndex = -1;
+    
+    for (let i = 1; i < data.length; i++) {
+      if (data[i][0] === shiftId && data[i][1] === session.username && data[i][10] === "Aktif") {
+        rowIndex = i + 1;
+        break;
+      }
+    }
+    
+    if (rowIndex === -1) {
+      return { success: false, message: "Shift tidak ditemukan atau sudah ditutup." };
+    }
+    
+    const trxSheet = getSheet("transactions");
+    const trxData = trxSheet.getDataRange().getValues();
+    let totalTransaksi = 0;
+    let totalTunai = 0;
+    let totalNonTunai = 0;
+    let jumlahOrder = 0;
+    
+    for (let i = 1; i < trxData.length; i++) {
+      if (trxData[i][21] === shiftId) {
+        jumlahOrder++;
+        const total = parseInt(trxData[i][5]) || 0;
+        const terbayar = parseInt(trxData[i][16]) || 0;
+        const metode = trxData[i][11] || "Tunai";
+        
+        totalTransaksi += total;
+        if (metode.toString().toLowerCase().includes("tunai")) {
+          totalTunai += terbayar;
+        } else {
+          totalNonTunai += terbayar;
+        }
+      }
+    }
+    
+    const now = new Date().toISOString();
+    
+    sheet.getRange(rowIndex, 5).setValue(now);
+    sheet.getRange(rowIndex, 7).setValue(totalTransaksi);
+    sheet.getRange(rowIndex, 8).setValue(totalTunai);
+    sheet.getRange(rowIndex, 9).setValue(totalNonTunai);
+    sheet.getRange(rowIndex, 10).setValue(jumlahOrder);
+    sheet.getRange(rowIndex, 11).setValue("Selesai");
+    sheet.getRange(rowIndex, 12).setValue(catatan || "");
+    
+    return { 
+      success: true, 
+      message: "Shift berhasil ditutup.",
+      summary: { totalTransaksi, totalTunai, totalNonTunai, jumlahOrder }
+    };
+  } catch(e) {
+    logError("closeShift", e.message);
+    return { success: false, message: "Gagal menutup shift: " + e.message };
+  } finally {
+    lock.releaseLock();
   }
 }
 
