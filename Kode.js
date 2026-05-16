@@ -232,6 +232,7 @@ function setupDatabase() {
           "nominal_dp",
           "nominal_pelunasan",
           "shift_id",
+          "pelunasan_shift_id",
         ]);
       } else if (name === "settings") {
         sheet.appendRow(["key", "value"]);
@@ -286,6 +287,14 @@ function setupDatabase() {
       if (headers.indexOf("shift_id") === -1) {
         const sCol = sheet.getLastColumn() + 1;
         sheet.getRange(1, sCol).setValue("shift_id");
+      }
+      // Migration: tambah kolom pelunasan_shift_id (kolom ke-23) untuk attribusi pelunasan ke shift saat pelunasan terjadi
+      const headers2 = sheet
+        .getRange(1, 1, 1, sheet.getLastColumn())
+        .getValues()[0];
+      if (headers2.indexOf("pelunasan_shift_id") === -1) {
+        const sCol = sheet.getLastColumn() + 1;
+        sheet.getRange(1, sCol).setValue("pelunasan_shift_id");
       }
     }
   });
@@ -405,7 +414,8 @@ function getTransactions(token) {
     // [P2] Optimasi: hanya baca 300 row terakhir daripada seluruh sheet
     const rowCount = Math.min(300, lastRow - 1);
     const startRow = lastRow - rowCount + 1;
-    const rawData = sheet.getRange(startRow, 1, rowCount, 21).getValues();
+    // [SHIFT] Baca 23 kolom termasuk pelunasan_shift_id
+    const rawData = sheet.getRange(startRow, 1, rowCount, 23).getValues();
 
     let validData = [];
     for (let i = 0; i < rawData.length; i++) {
@@ -454,6 +464,8 @@ function getTransactions(token) {
       nominal_dp: parseInt(r[19]) || parseInt(r[16]) || 0,
       nominal_pelunasan: parseInt(r[20]) || 0,
       metode_pelunasan: String(r[13] || ""),
+      shift_id: String(r[21] || ""),
+      pelunasan_shift_id: String(r[22] || ""),
     }));
   } catch (e) {
     logError("getTransactions", e.message);
@@ -566,6 +578,7 @@ function createTransaction(token, data) {
       nominalDp,
       nominalPelunasan,
       activeShift ? activeShift.id : "",
+      "", // pelunasan_shift_id (diisi saat pelunasan terjadi)
     ]);
 
     saveOrUpdateCustomer(data.kasir, data.customer, data.whatsapp || "", date);
@@ -614,18 +627,34 @@ function updateTransactionStatus(token, id, newStatus) {
 }
 
 function lunasDanAmbil(token, id, metode) {
-  validateSession_(token);
+  const session = validateSession_(token);
   const lock = LockService.getScriptLock();
   try {
     lock.waitLock(3000);
     const sheet = getSheet("transactions");
     const lastRow = sheet.getLastRow();
     const ids = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+
+    // [SHIFT] Attribusi pelunasan ke shift kasir yang sedang melakukan pelunasan.
+    // Admin bypass shift, jadi pelunasan_shift_id boleh kosong untuk role admin.
+    let pelunasanShiftId = "";
+    if (session.role !== "admin") {
+      const activeShift = getActiveShift_(session.username);
+      if (!activeShift) {
+        return {
+          success: false,
+          message: "Anda belum membuka shift. Silakan buka shift sebelum proses pelunasan.",
+        };
+      }
+      pelunasanShiftId = activeShift.id;
+    }
+
     for (let i = 0; i < ids.length; i++) {
       if (ids[i][0] === id) {
         const row = i + 2;
         const total = parseInt(sheet.getRange(row, 6).getValue()) || 0;
-        const rowData = sheet.getRange(row, 1, 1, 21).getValues()[0];
+        // [SHIFT] Lebar baris diperluas ke 23 kolom (termasuk pelunasan_shift_id)
+        const rowData = sheet.getRange(row, 1, 1, 23).getValues()[0];
 
         let currentDp = parseInt(rowData[19]);
         // Fallback untuk data lama yang belum punya nominal_dp (ambil dari terbayar)
@@ -641,12 +670,13 @@ function lunasDanAmbil(token, id, metode) {
         rowData[18] = new Date().toISOString(); // tanggal_pelunasan
         rowData[20] = total - currentDp; // nominal_pelunasan
         rowData[13] = metode; // col N (metode_pelunasan)
+        rowData[22] = pelunasanShiftId; // col W (pelunasan_shift_id)
 
         if (currentDp === 0) {
           rowData[11] = metode; // Timpa metode_pembayaran utama hanya jika sebelumnya 0 DP
         }
 
-        sheet.getRange(row, 1, 1, 21).setValues([rowData]);
+        sheet.getRange(row, 1, 1, 23).setValues([rowData]);
         return { success: true };
       }
     }
@@ -1253,7 +1283,8 @@ function getReportData(token, startDateStr, endDateStr) {
     if (lastRow <= 1) return [];
 
     // Mengambil seluruh data (tanpa limitasi 300 baris) agar laporan bulanan akurat
-    const rawData = sheet.getRange(2, 1, lastRow - 1, 21).getValues();
+    // [SHIFT] Baca 23 kolom termasuk shift_id & pelunasan_shift_id
+    const rawData = sheet.getRange(2, 1, lastRow - 1, 23).getValues();
     let validData = [];
 
     let startD = startDateStr ? new Date(startDateStr) : null;
@@ -1321,6 +1352,8 @@ function getReportData(token, startDateStr, endDateStr) {
         nominal_dp: parseInt(r[19]) || parseInt(r[16]) || 0,
         nominal_pelunasan: parseInt(r[20]) || 0,
         metode_pelunasan: String(r[13] || ""),
+        shift_id: String(r[21] || ""),
+        pelunasan_shift_id: String(r[22] || ""),
       });
     }
     return validData;
@@ -1444,6 +1477,115 @@ function openShift(token, modalAwal) {
   }
 }
 
+// [SHIFT] Helper terpadu — hitung rekap shift berdasarkan transaksi (DP),
+// pelunasan (yang dilakukan dalam shift ini), dan pengeluaran shift.
+// Digunakan oleh closeShift, forceCloseShift, autoCloseExpiredShifts,
+// dan getShiftHistory (untuk shift yang masih aktif → preview).
+function computeShiftSummary_(shiftId, modalAwal) {
+  const trxSheet = getSheet("transactions");
+  const lastRow = trxSheet.getLastRow();
+  let totalTransaksi = 0; // grand total nilai transaksi di shift ini
+  let totalTunai = 0;
+  let totalNonTunai = 0;
+  let jumlahOrder = 0;
+  let totalDp = 0;        // pemasukan DP yang masuk ke shift ini
+  let totalPelunasan = 0; // pemasukan pelunasan yang dieksekusi di shift ini
+
+  if (lastRow > 1) {
+    const trxData = trxSheet.getRange(2, 1, lastRow - 1, 23).getValues();
+    for (let i = 0; i < trxData.length; i++) {
+      const r = trxData[i];
+      if (!r[0]) continue;
+
+      const total = parseInt(r[5]) || 0;
+      const metodeUtama = String(r[11] || "Tunai");
+      const metodePelunasan = String(r[13] || "");
+      const dp = parseInt(r[19]) || 0;
+      const pelunasan = parseInt(r[20]) || 0;
+      const trxShiftId = String(r[21] || "");
+      const pelunasanShiftId = String(r[22] || "");
+
+      // Transaksi DIBUAT di shift ini → catat sebagai order, akumulasi DP-nya
+      if (trxShiftId === shiftId) {
+        jumlahOrder++;
+        totalTransaksi += total;
+        if (metodeUtama.toLowerCase().includes("tunai")) totalTunai += dp;
+        else totalNonTunai += dp;
+        totalDp += dp;
+      }
+
+      // Pelunasan DILAKUKAN di shift ini (mungkin shift berbeda dari pembuatan)
+      if (pelunasanShiftId === shiftId && pelunasan > 0) {
+        const metodeP = (metodePelunasan || metodeUtama).toLowerCase();
+        if (metodeP.includes("tunai")) totalTunai += pelunasan;
+        else totalNonTunai += pelunasan;
+        totalPelunasan += pelunasan;
+      }
+    }
+  }
+
+  // [SHIFT] Pengeluaran selama shift aktif — ambil semua pengeluaran antara waktu_mulai shift ini dan now (atau waktu_selesai untuk shift sudah ditutup).
+  // Karena pengeluaran tidak punya shift_id, gunakan window waktu shift sebagai aproksimasi.
+  let totalPengeluaran = 0;
+  let pengeluaranList = [];
+  try {
+    const shiftSheet = getSheet("shifts");
+    const shiftData = shiftSheet.getDataRange().getValues();
+    let waktuMulai = null;
+    let waktuSelesai = null;
+    let username = "";
+    for (let i = 1; i < shiftData.length; i++) {
+      if (shiftData[i][0] === shiftId) {
+        waktuMulai = shiftData[i][3] ? new Date(shiftData[i][3]) : null;
+        waktuSelesai = shiftData[i][4] ? new Date(shiftData[i][4]) : null;
+        username = String(shiftData[i][1] || "");
+        break;
+      }
+    }
+    if (waktuMulai && !isNaN(waktuMulai)) {
+      const start = waktuMulai.getTime();
+      const end = (waktuSelesai && !isNaN(waktuSelesai))
+        ? waktuSelesai.getTime()
+        : Date.now();
+      const pgSheet = getSheet("pengeluaran");
+      const pgData = pgSheet.getDataRange().getValues();
+      for (let i = 1; i < pgData.length; i++) {
+        if (pgData[i].join("").trim() === "") continue;
+        const t = pgData[i][1] ? new Date(pgData[i][1]).getTime() : 0;
+        const kasir = String(pgData[i][5] || "");
+        if (t >= start && t <= end && (!username || kasir === username || kasir === "")) {
+          const nominal = parseInt(pgData[i][4]) || 0;
+          totalPengeluaran += nominal;
+          pengeluaranList.push({
+            id: pgData[i][0],
+            keterangan: pgData[i][2],
+            kategori: pgData[i][3],
+            jumlah: nominal,
+          });
+        }
+      }
+    }
+  } catch (e) {
+    logError("computeShiftSummary_pengeluaran", e.message);
+  }
+
+  const modal = parseInt(modalAwal) || 0;
+  const saldoAkhir = modal + totalTunai - totalPengeluaran;
+
+  return {
+    totalTransaksi,
+    totalTunai,
+    totalNonTunai,
+    jumlahOrder,
+    totalDp,
+    totalPelunasan,
+    totalPengeluaran,
+    pengeluaranList,
+    modalAwal: modal,
+    saldoAkhir,
+  };
+}
+
 function closeShift(token, shiftId, catatan) {
   const session = validateSession_(token);
   const lock = LockService.getScriptLock();
@@ -1452,58 +1594,38 @@ function closeShift(token, shiftId, catatan) {
     const sheet = getSheet("shifts");
     const data = sheet.getDataRange().getValues();
     let rowIndex = -1;
-    
+    let modalAwal = 0;
+
     for (let i = 1; i < data.length; i++) {
       if (data[i][0] === shiftId && data[i][1] === session.username && data[i][10] === "Aktif") {
         rowIndex = i + 1;
+        modalAwal = parseInt(data[i][5]) || 0;
         break;
       }
     }
-    
+
     if (rowIndex === -1) {
       return { success: false, message: "Shift tidak ditemukan atau sudah ditutup." };
     }
-    
-    const trxSheet = getSheet("transactions");
-    const trxData = trxSheet.getDataRange().getValues();
-    let totalTransaksi = 0;
-    let totalTunai = 0;
-    let totalNonTunai = 0;
-    let jumlahOrder = 0;
-    
-    for (let i = 1; i < trxData.length; i++) {
-      if (trxData[i][21] === shiftId) {
-        jumlahOrder++;
-        const total = parseInt(trxData[i][5]) || 0;
-        const terbayar = parseInt(trxData[i][16]) || 0;
-        const metode = trxData[i][11] || "Tunai";
-        
-        totalTransaksi += total;
-        if (metode.toString().toLowerCase().includes("tunai")) {
-          totalTunai += terbayar;
-        } else {
-          totalNonTunai += terbayar;
-        }
-      }
-    }
-    
+
+    const summary = computeShiftSummary_(shiftId, modalAwal);
     const now = new Date().toISOString();
-    
+
     // [OPT] Batch write — 7 setValue → 1 setValues
     const existingRow = sheet.getRange(rowIndex, 1, 1, 12).getValues()[0];
     existingRow[4] = now;
-    existingRow[6] = totalTransaksi;
-    existingRow[7] = totalTunai;
-    existingRow[8] = totalNonTunai;
-    existingRow[9] = jumlahOrder;
+    existingRow[6] = summary.totalTransaksi;
+    existingRow[7] = summary.totalTunai;
+    existingRow[8] = summary.totalNonTunai;
+    existingRow[9] = summary.jumlahOrder;
     existingRow[10] = "Selesai";
     existingRow[11] = catatan || "";
     sheet.getRange(rowIndex, 1, 1, 12).setValues([existingRow]);
-    
-    return { 
-      success: true, 
+
+    return {
+      success: true,
       message: "Shift berhasil ditutup.",
-      summary: { totalTransaksi, totalTunai, totalNonTunai, jumlahOrder }
+      summary: summary,
     };
   } catch(e) {
     logError("closeShift", e.message);
@@ -1511,6 +1633,178 @@ function closeShift(token, shiftId, catatan) {
   } finally {
     lock.releaseLock();
   }
+}
+
+// [SHIFT] Admin force-close — untuk shift yang lupa ditutup atau kasir tidak available
+function forceCloseShift(token, shiftId, catatan) {
+  validateAdminSession_(token);
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(5000);
+    const sheet = getSheet("shifts");
+    const data = sheet.getDataRange().getValues();
+    let rowIndex = -1;
+    let modalAwal = 0;
+
+    for (let i = 1; i < data.length; i++) {
+      if (data[i][0] === shiftId && data[i][10] === "Aktif") {
+        rowIndex = i + 1;
+        modalAwal = parseInt(data[i][5]) || 0;
+        break;
+      }
+    }
+
+    if (rowIndex === -1) {
+      return { success: false, message: "Shift aktif tidak ditemukan." };
+    }
+
+    const summary = computeShiftSummary_(shiftId, modalAwal);
+    const now = new Date().toISOString();
+    const noteFinal = (catatan ? catatan + " — " : "") + "[Force-closed by admin]";
+
+    const existingRow = sheet.getRange(rowIndex, 1, 1, 12).getValues()[0];
+    existingRow[4] = now;
+    existingRow[6] = summary.totalTransaksi;
+    existingRow[7] = summary.totalTunai;
+    existingRow[8] = summary.totalNonTunai;
+    existingRow[9] = summary.jumlahOrder;
+    existingRow[10] = "Force-Closed";
+    existingRow[11] = noteFinal;
+    sheet.getRange(rowIndex, 1, 1, 12).setValues([existingRow]);
+
+    return {
+      success: true,
+      message: "Shift berhasil di-force close.",
+      summary: summary,
+    };
+  } catch(e) {
+    logError("forceCloseShift", e.message);
+    return { success: false, message: "Gagal force close shift: " + e.message };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// [SHIFT] Admin: ambil daftar shift dalam rentang tanggal (default 30 hari terakhir)
+function getShiftHistory(token, startDateStr, endDateStr) {
+  validateAdminSession_(token);
+  try {
+    const sheet = getSheet("shifts");
+    const lastRow = sheet.getLastRow();
+    if (lastRow <= 1) return { success: true, data: [] };
+
+    const data = sheet.getRange(2, 1, lastRow - 1, 12).getValues();
+    let startD = startDateStr ? new Date(startDateStr) : null;
+    if (startD) startD.setHours(0, 0, 0, 0);
+    let endD = endDateStr ? new Date(endDateStr) : null;
+    if (endD) endD.setHours(23, 59, 59, 999);
+
+    const result = [];
+    for (let i = 0; i < data.length; i++) {
+      const r = data[i];
+      if (!r[0]) continue;
+      const startTime = r[3] ? new Date(r[3]) : null;
+      if (startD && startTime && startTime < startD) continue;
+      if (endD && startTime && startTime > endD) continue;
+
+      const status = String(r[10] || "");
+      const modalAwal = parseInt(r[5]) || 0;
+      let summary = null;
+      // Untuk shift yang masih aktif, hitung preview real-time
+      if (status === "Aktif") {
+        summary = computeShiftSummary_(r[0], modalAwal);
+      }
+
+      result.push({
+        id: r[0],
+        kasir: r[1],
+        nama_kasir: r[2],
+        waktu_mulai: r[3] ? new Date(r[3]).toISOString() : "",
+        waktu_selesai: r[4] ? new Date(r[4]).toISOString() : "",
+        modal_awal: modalAwal,
+        total_transaksi: parseInt(r[6]) || 0,
+        total_tunai: parseInt(r[7]) || 0,
+        total_non_tunai: parseInt(r[8]) || 0,
+        jumlah_order: parseInt(r[9]) || 0,
+        status: status,
+        catatan: String(r[11] || ""),
+        live_summary: summary, // null untuk shift yang sudah ditutup
+      });
+    }
+    // Urutkan terbaru → terlama
+    result.sort((a, b) => {
+      const ta = a.waktu_mulai ? new Date(a.waktu_mulai).getTime() : 0;
+      const tb = b.waktu_mulai ? new Date(b.waktu_mulai).getTime() : 0;
+      return tb - ta;
+    });
+
+    return { success: true, data: result };
+  } catch (e) {
+    logError("getShiftHistory", e.message);
+    return { success: false, message: "Gagal ambil riwayat shift: " + e.message };
+  }
+}
+
+// [SHIFT] Time-trigger: jalan otomatis tiap hari pukul 23:50
+// Mencari shift yang masih Aktif dan menutupnya dengan status Force-Closed.
+function autoCloseExpiredShifts() {
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(10000);
+    const sheet = getSheet("shifts");
+    const lastRow = sheet.getLastRow();
+    if (lastRow <= 1) return;
+
+    const data = sheet.getRange(2, 1, lastRow - 1, 12).getValues();
+    const now = new Date().toISOString();
+    let closedCount = 0;
+
+    for (let i = 0; i < data.length; i++) {
+      const r = data[i];
+      if (!r[0] || r[10] !== "Aktif") continue;
+
+      const shiftId = r[0];
+      const modalAwal = parseInt(r[5]) || 0;
+      const rowIndex = i + 2;
+
+      const summary = computeShiftSummary_(shiftId, modalAwal);
+      const updatedRow = [
+        r[0], r[1], r[2], r[3],
+        now,                           // waktu_selesai
+        r[5],
+        summary.totalTransaksi,
+        summary.totalTunai,
+        summary.totalNonTunai,
+        summary.jumlahOrder,
+        "Force-Closed",
+        "[Auto-closed sistem]",
+      ];
+      sheet.getRange(rowIndex, 1, 1, 12).setValues([updatedRow]);
+      closedCount++;
+    }
+    if (closedCount > 0) logError("autoCloseExpiredShifts", "Closed " + closedCount + " shifts", "");
+  } catch (e) {
+    logError("autoCloseExpiredShifts", e.message);
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// [SHIFT] One-time setup: pasang trigger autoCloseExpiredShifts setiap hari 23:50
+function setupShiftAutoCloseTrigger() {
+  const triggers = ScriptApp.getProjectTriggers();
+  for (let i = 0; i < triggers.length; i++) {
+    if (triggers[i].getHandlerFunction() === "autoCloseExpiredShifts") {
+      ScriptApp.deleteTrigger(triggers[i]);
+    }
+  }
+  ScriptApp.newTrigger("autoCloseExpiredShifts")
+    .timeBased()
+    .atHour(23)
+    .nearMinute(50)
+    .everyDays(1)
+    .create();
+  return "Trigger autoCloseExpiredShifts terpasang (jalan tiap hari ~23:50).";
 }
 
 // ==========================================
