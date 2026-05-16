@@ -4463,6 +4463,13 @@ Terima kasih.`;
     const btn = document.getElementById("shiftBannerActionBtn");
     
     if (!banner) return;
+    
+    // [UX Update] Sembunyikan banner shift untuk role admin
+    if (currentUser && currentUser.role === "admin") {
+      banner.classList.add("hidden");
+      return;
+    }
+    
     banner.classList.remove("hidden");
     
     if (currentShift) {
@@ -4589,6 +4596,11 @@ Terima kasih.`;
   }
 
   function checkActiveShiftBeforeTransaction() {
+    // [UX Update] Bypass kewajiban shift untuk role admin
+    if (currentUser && currentUser.role === "admin") {
+      return true;
+    }
+
     if (!currentShift) {
       showToast("Anda belum membuka shift. Silakan buka shift terlebih dahulu.", "error");
       const banner = document.getElementById("shiftBanner");

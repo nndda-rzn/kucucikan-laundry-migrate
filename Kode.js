@@ -466,10 +466,13 @@ function createTransaction(token, data) {
   if (!data || !data.customer || !data.items_json)
     return { success: false, message: "Data tidak lengkap." };
     
-  // Periksa shift aktif (WAJIB)
-  const activeShift = getActiveShift_(session.username);
-  if (!activeShift) {
-    return { success: false, message: "Anda belum membuka shift. Silakan buka shift terlebih dahulu." };
+  // Periksa shift aktif (WAJIB untuk Kasir, Bypass untuk Admin)
+  let activeShift = null;
+  if (session.role !== "admin") {
+    activeShift = getActiveShift_(session.username);
+    if (!activeShift) {
+      return { success: false, message: "Anda belum membuka shift. Silakan buka shift terlebih dahulu." };
+    }
   }
 
   const lock = LockService.getScriptLock();
@@ -562,7 +565,7 @@ function createTransaction(token, data) {
       tanggalPelunasan,
       nominalDp,
       nominalPelunasan,
-      activeShift.id,
+      activeShift ? activeShift.id : "",
     ]);
 
     saveOrUpdateCustomer(data.kasir, data.customer, data.whatsapp || "", date);
