@@ -560,30 +560,35 @@
     const lp = document.getElementById("loginPage");
     const dp = document.getElementById("dashboardPage");
     lp.style.opacity = "0";
-    loadSettings();
+    try { loadSettings(); } catch (e) { console.error("[setupDashboard] loadSettings:", e); }
     setTimeout(() => {
+      // [FIX] Reveal dashboard SEBELUM panggil fungsi lain — agar tidak blank
+      // jika ada satu fungsi yang error
       lp.classList.add("hidden");
       dp.classList.remove("hidden");
-      setTimeout(() => (dp.style.opacity = "1"), 50);
-      document.getElementById("userNameDisplay").innerText =
-        "Halo, " + escapeHTML(currentUser.nama || "Pengguna");
-      startSessionTimer(); // Memulai timer sesi
-      const sidebarUserName = document.getElementById("sidebarUserName");
-      const sidebarUserRole = document.getElementById("sidebarUserRole");
-      if (sidebarUserName)
-        sidebarUserName.innerText = escapeHTML(currentUser.nama || "Pengguna");
-      if (sidebarUserRole)
-        sidebarUserRole.innerText = escapeHTML(currentUser.role || "Staff");
+      dp.classList.remove("opacity-0");
+      dp.style.opacity = "1";
 
-      if (currentUser.nama) {
-        const initials = document.querySelectorAll(
-          "#userInitial, #sidebarUserInitial",
-        );
-        for (let i = 0; i < initials.length; i++)
-          initials[i].innerText = escapeHTML(
-            currentUser.nama.charAt(0).toUpperCase(),
+      try {
+        const userDisp = document.getElementById("userNameDisplay");
+        if (userDisp) userDisp.innerText = "Halo, " + escapeHTML(currentUser.nama || "Pengguna");
+        startSessionTimer();
+        const sidebarUserName = document.getElementById("sidebarUserName");
+        const sidebarUserRole = document.getElementById("sidebarUserRole");
+        if (sidebarUserName)
+          sidebarUserName.innerText = escapeHTML(currentUser.nama || "Pengguna");
+        if (sidebarUserRole)
+          sidebarUserRole.innerText = escapeHTML(currentUser.role || "Staff");
+
+        if (currentUser.nama) {
+          const initials = document.querySelectorAll(
+            "#userInitial, #sidebarUserInitial",
           );
-      }
+          for (let i = 0; i < initials.length; i++)
+            initials[i].innerText = escapeHTML(
+              currentUser.nama.charAt(0).toUpperCase(),
+            );
+        }
       const isAdmin = currentUser.role === "admin";
       const menuDesk = document.getElementById("adminMenuDesktop");
       if (menuDesk) menuDesk.classList.toggle("hidden", !isAdmin);
@@ -596,10 +601,12 @@
       
       const userDesk = document.getElementById("adminUsersDesktop");
       if (userDesk) userDesk.classList.toggle("hidden", !isAdmin);
-      // FITUR PROMO TELAH DIHAPUS
+      } catch (e) {
+        console.error("[setupDashboard] header/sidebar error:", e);
+      }
 
-      showSection("overview");
-      fetchCustomers();
+      try { showSection("overview"); } catch (e) { console.error("[setupDashboard] showSection:", e); }
+      try { fetchCustomers(); } catch (e) { console.error("[setupDashboard] fetchCustomers:", e); }
 
       // [OPT] WAVE 2: getDashboardBundle — 1 GAS call menggantikan 3 serial call
       // (loadSettings + loadTransactions + fetchPaket) → getDashboardBundle

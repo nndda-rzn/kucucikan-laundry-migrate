@@ -6,3 +6,11 @@ input.css
 *.md
 .git/
 .gitignore
+.gitattributes
+temp.js
+check_js.js
+test_output.html
+diff.txt
+*.tmp
+tailwind.raw.css
+.opencode/

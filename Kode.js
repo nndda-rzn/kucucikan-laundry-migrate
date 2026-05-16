@@ -1066,7 +1066,7 @@ function saveUangAwal(token, nominal, dateStr) {
 }
 
 function getKasHarian(token, tanggalStr) {
-  validateSession_(token);
+  const session = validateSession_(token);
   try {
     // [OPT] Hapus setupKasSheet_() — sheet sudah dibuat saat setupDatabase(), tidak perlu cek ulang di setiap read
     const targetDate = tanggalStr ? new Date(tanggalStr) : new Date();
@@ -1075,8 +1075,8 @@ function getKasHarian(token, tanggalStr) {
     // 1. Ambil Uang Awal
     let uangAwal = 0;
     
-    // Cek apakah ada shift aktif untuk hari ini
-    let activeShift = getActiveShift_();
+    // [FIX] getActiveShift_ butuh username — sebelumnya dipanggil tanpa arg → selalu null
+    let activeShift = getActiveShift_(session.username);
     if (activeShift) {
        const shiftDate = new Date(activeShift.waktu_mulai);
        shiftDate.setHours(0, 0, 0, 0);
@@ -1094,7 +1094,8 @@ function getKasHarian(token, tanggalStr) {
         const rowDate = new Date(dataShifts[i][3]); // waktu_mulai
         rowDate.setHours(0, 0, 0, 0);
         if (rowDate.getTime() === targetDate.getTime()) {
-          uangAwal = parseInt(dataShifts[i][2]) || 0; // modal_awal
+          // [FIX] modal_awal di kolom indeks 5 (kolom F), bukan 2
+          uangAwal = parseInt(dataShifts[i][5]) || 0;
           break; // Ambil yang paling terakhir saja
         }
       }
@@ -1488,13 +1489,16 @@ function closeShift(token, shiftId, catatan) {
     
     const now = new Date().toISOString();
     
-    sheet.getRange(rowIndex, 5).setValue(now);
-    sheet.getRange(rowIndex, 7).setValue(totalTransaksi);
-    sheet.getRange(rowIndex, 8).setValue(totalTunai);
-    sheet.getRange(rowIndex, 9).setValue(totalNonTunai);
-    sheet.getRange(rowIndex, 10).setValue(jumlahOrder);
-    sheet.getRange(rowIndex, 11).setValue("Selesai");
-    sheet.getRange(rowIndex, 12).setValue(catatan || "");
+    // [OPT] Batch write — 7 setValue → 1 setValues
+    const existingRow = sheet.getRange(rowIndex, 1, 1, 12).getValues()[0];
+    existingRow[4] = now;
+    existingRow[6] = totalTransaksi;
+    existingRow[7] = totalTunai;
+    existingRow[8] = totalNonTunai;
+    existingRow[9] = jumlahOrder;
+    existingRow[10] = "Selesai";
+    existingRow[11] = catatan || "";
+    sheet.getRange(rowIndex, 1, 1, 12).setValues([existingRow]);
     
     return { 
       success: true, 
