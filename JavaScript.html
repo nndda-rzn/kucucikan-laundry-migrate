@@ -981,7 +981,18 @@
       toggleMobileMenu();
     }
 
-    if (name === "laporan") ensureLazyScripts(function() { generateReport("today"); });
+    if (name === "laporan") {
+      ensureLazyScripts(function() { generateReport("today"); });
+      // [SHIFT] Reveal & auto-load Rekap Shift untuk admin
+      const shiftWrap = document.getElementById("adminShiftRekapWrap");
+      if (shiftWrap) {
+        const isAdmin = currentUser && currentUser.role === "admin";
+        shiftWrap.classList.toggle("hidden", !isAdmin);
+        if (isAdmin) {
+          try { loadShiftRekap(); } catch (e) { console.error("[loadShiftRekap]:", e); }
+        }
+      }
+    }
     if (name === "transaksi" || name === "paket") fetchPaket();
     if (name === "transaksi") restoreDraft();
     if (name === "pelanggan") {
@@ -4584,11 +4595,10 @@ Terima kasih.`;
           closeCloseShiftModal();
           currentShift = null;
           updateShiftBanner();
-          
+
           if (res.summary) {
-             setTimeout(() => {
-                showToast(`Trx: ${res.summary.jumlahOrder} | Tunai: Rp ${res.summary.totalTunai.toLocaleString('id-ID')}`, "success");
-             }, 3500);
+            // [SHIFT] Tampilkan modal rekap detail (saldo akhir, pengeluaran, dll.)
+            showShiftSummaryModal(res.summary);
           }
         } else {
           showToast(res ? res.message : "Gagal menutup shift", "error");
@@ -4618,6 +4628,239 @@ Terima kasih.`;
       return false;
     }
     return true;
+  }
+
+  // [SHIFT] Tampilkan modal rekap setelah shift ditutup
+  function showShiftSummaryModal(summary) {
+    const cont = document.getElementById("shiftSummaryRows");
+    if (!cont) return;
+    const fmtRp = (n) => "Rp " + (parseInt(n) || 0).toLocaleString("id-ID");
+    const rows = [
+      { label: "Modal Awal", value: fmtRp(summary.modalAwal), cls: "text-slate-700" },
+      { label: "Jumlah Order", value: (summary.jumlahOrder || 0) + "x", cls: "text-slate-700" },
+      { label: "Total Tunai", value: fmtRp(summary.totalTunai), cls: "text-emerald-600" },
+      { label: "Total Non-Tunai", value: fmtRp(summary.totalNonTunai), cls: "text-blue-600" },
+      { label: "Total Pengeluaran", value: fmtRp(summary.totalPengeluaran || 0), cls: "text-red-500" },
+    ];
+    let html = "";
+    for (const r of rows) {
+      html += `<div class="flex justify-between items-center py-2 border-b border-slate-100">
+        <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">${escapeHTML(r.label)}</span>
+        <span class="text-sm font-black ${r.cls}">${escapeHTML(r.value)}</span>
+      </div>`;
+    }
+    html += `<div class="flex justify-between items-center pt-3 mt-1 bg-emerald-50 rounded-xl px-4 py-3">
+      <span class="text-xs font-bold text-emerald-600 uppercase tracking-wider">Saldo Akhir</span>
+      <span class="text-lg font-black text-emerald-700">${escapeHTML(fmtRp(summary.saldoAkhir || 0))}</span>
+    </div>`;
+    cont.innerHTML = html;
+    const modal = document.getElementById("shiftSummaryModal");
+    const content = document.getElementById("shiftSummaryContent");
+    modal.classList.remove("hidden");
+    modal.classList.add("flex");
+    setTimeout(() => content.classList.remove("scale-95"), 10);
+  }
+
+  function closeShiftSummaryModal() {
+    const modal = document.getElementById("shiftSummaryModal");
+    const content = document.getElementById("shiftSummaryContent");
+    content.classList.add("scale-95");
+    setTimeout(() => {
+      modal.classList.add("hidden");
+      modal.classList.remove("flex");
+    }, 200);
+  }
+
+  // [SHIFT] Admin: Rekap Shift di halaman Laporan
+  let _shiftRekapCache = [];
+
+  function loadShiftRekap() {
+    if (!currentUser || currentUser.role !== "admin") return;
+    const cont = document.getElementById("shiftRekapList");
+    if (!cont) return;
+
+    cont.innerHTML = `<div class="flex flex-col gap-3">${[1,2,3].map(() => `
+      <div class="bg-slate-50 p-4 rounded-2xl animate-pulse flex items-center gap-4">
+        <div class="w-12 h-12 rounded-full bg-slate-200 flex-shrink-0"></div>
+        <div class="flex-1 space-y-2">
+          <div class="h-4 bg-slate-200 rounded-lg w-1/3"></div>
+          <div class="h-3 bg-slate-100 rounded-lg w-2/3"></div>
+        </div>
+      </div>`).join("")}</div>`;
+
+    // Default: 30 hari terakhir
+    const end = new Date();
+    const start = new Date();
+    start.setDate(start.getDate() - 30);
+
+    google.script.run
+      .withSuccessHandler(function (res) {
+        if (res && res.success) {
+          _shiftRekapCache = res.data || [];
+          renderShiftRekap(_shiftRekapCache);
+        } else {
+          cont.innerHTML = `<p class="text-sm text-red-500 text-center py-6">${escapeHTML(res ? res.message : "Gagal memuat rekap shift")}</p>`;
+        }
+      })
+      .withFailureHandler(function (err) {
+        cont.innerHTML = `<p class="text-sm text-red-500 text-center py-6">Error: ${escapeHTML(err.message)}</p>`;
+      })
+      .getShiftHistory(currentUser.token, start.toISOString(), end.toISOString());
+  }
+
+  function renderShiftRekap(data) {
+    const cont = document.getElementById("shiftRekapList");
+    if (!cont) return;
+    if (!data || data.length === 0) {
+      cont.innerHTML = `<p class="text-sm text-slate-400 text-center py-6">Belum ada shift dalam 30 hari terakhir.</p>`;
+      return;
+    }
+
+    const fmtRp = (n) => "Rp " + (parseInt(n) || 0).toLocaleString("id-ID");
+    const fmtDt = (s) => {
+      if (!s) return "-";
+      const d = new Date(s);
+      return isNaN(d) ? "-" : d.toLocaleString("id-ID", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+    };
+    const fmtDur = (a, b) => {
+      const da = a ? new Date(a) : null;
+      const db = b ? new Date(b) : new Date();
+      if (!da || isNaN(da)) return "-";
+      const ms = db.getTime() - da.getTime();
+      if (ms < 0) return "-";
+      const h = Math.floor(ms / 3600000);
+      const m = Math.floor((ms % 3600000) / 60000);
+      return h + "j " + m + "m";
+    };
+
+    const parts = [];
+    for (let i = 0; i < data.length; i++) {
+      const s = data[i];
+      const isAktif = s.status === "Aktif";
+      const isForce = s.status === "Force-Closed";
+      const summary = s.live_summary || {
+        totalTransaksi: s.total_transaksi,
+        totalTunai: s.total_tunai,
+        totalNonTunai: s.total_non_tunai,
+        jumlahOrder: s.jumlah_order,
+        modalAwal: s.modal_awal,
+        totalPengeluaran: 0,
+        saldoAkhir: (parseInt(s.modal_awal) || 0) + (parseInt(s.total_tunai) || 0),
+      };
+      const badge = isAktif
+        ? `<span class="bg-emerald-50 text-emerald-600 border border-emerald-200 text-[9px] font-bold uppercase tracking-wider px-2 py-1 rounded">Aktif</span>`
+        : isForce
+          ? `<span class="bg-amber-50 text-amber-600 border border-amber-200 text-[9px] font-bold uppercase tracking-wider px-2 py-1 rounded">Force-Closed</span>`
+          : `<span class="bg-slate-50 text-slate-600 border border-slate-200 text-[9px] font-bold uppercase tracking-wider px-2 py-1 rounded">Selesai</span>`;
+      const forceBtn = isAktif
+        ? `<button onclick="openForceCloseShiftModal('${escapeHTML(s.id)}','${escapeHTML(s.nama_kasir)}','${escapeHTML(s.kasir)}')" class="text-[10px] font-bold bg-amber-50 text-amber-600 hover:bg-amber-100 px-3 py-1.5 rounded-lg border border-amber-200 transition-colors">Force Close</button>`
+        : "";
+
+      parts.push(`<div class="bg-white border border-slate-100 rounded-2xl p-4 shadow-sm hover:shadow-md transition-all">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-3">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-full bg-violet-100 text-violet-600 font-black flex items-center justify-center text-sm">${escapeHTML((s.nama_kasir || s.kasir || "?").charAt(0).toUpperCase())}</div>
+            <div>
+              <div class="flex items-center gap-2 flex-wrap">
+                <h5 class="text-sm font-black text-slate-900">${escapeHTML(s.nama_kasir || s.kasir || "Kasir")}</h5>
+                ${badge}
+              </div>
+              <p class="text-[10px] font-bold text-slate-500 mt-0.5">${fmtDt(s.waktu_mulai)} → ${fmtDt(s.waktu_selesai) || "Sekarang"} (${fmtDur(s.waktu_mulai, s.waktu_selesai)})</p>
+            </div>
+          </div>
+          ${forceBtn}
+        </div>
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+          <div class="bg-slate-50 rounded-lg p-2">
+            <p class="text-[9px] font-bold text-slate-400 uppercase">Modal</p>
+            <p class="font-black text-slate-700 mt-0.5">${fmtRp(summary.modalAwal)}</p>
+          </div>
+          <div class="bg-emerald-50 rounded-lg p-2">
+            <p class="text-[9px] font-bold text-emerald-500 uppercase">Tunai</p>
+            <p class="font-black text-emerald-700 mt-0.5">${fmtRp(summary.totalTunai)}</p>
+          </div>
+          <div class="bg-blue-50 rounded-lg p-2">
+            <p class="text-[9px] font-bold text-blue-500 uppercase">Non-Tunai</p>
+            <p class="font-black text-blue-700 mt-0.5">${fmtRp(summary.totalNonTunai)}</p>
+          </div>
+          <div class="bg-amber-50 rounded-lg p-2">
+            <p class="text-[9px] font-bold text-amber-500 uppercase">Order</p>
+            <p class="font-black text-amber-700 mt-0.5">${summary.jumlahOrder || 0}x</p>
+          </div>
+        </div>
+        ${summary.totalPengeluaran > 0 || summary.saldoAkhir !== undefined ? `
+        <div class="mt-2 grid grid-cols-2 gap-2 text-xs">
+          <div class="bg-red-50 rounded-lg p-2 border border-red-100">
+            <p class="text-[9px] font-bold text-red-500 uppercase">Pengeluaran</p>
+            <p class="font-black text-red-600 mt-0.5">${fmtRp(summary.totalPengeluaran || 0)}</p>
+          </div>
+          <div class="bg-violet-50 rounded-lg p-2 border border-violet-100">
+            <p class="text-[9px] font-bold text-violet-500 uppercase">Saldo Akhir</p>
+            <p class="font-black text-violet-700 mt-0.5">${fmtRp(summary.saldoAkhir || 0)}</p>
+          </div>
+        </div>` : ""}
+        ${s.catatan ? `<p class="text-[10px] text-slate-500 mt-2 italic">"${escapeHTML(s.catatan)}"</p>` : ""}
+      </div>`);
+    }
+    cont.innerHTML = parts.join("");
+  }
+
+  // Pending state untuk modal force-close
+  let _forceClosePendingId = null;
+
+  function openForceCloseShiftModal(shiftId, namaKasir, username) {
+    _forceClosePendingId = shiftId;
+    const info = document.getElementById("forceCloseShiftInfo");
+    if (info) info.innerText = "Shift " + (namaKasir || username || shiftId) + " akan ditutup paksa. Pastikan kasir tidak sedang melakukan transaksi.";
+    document.getElementById("forceCloseShiftCatatan").value = "";
+    const modal = document.getElementById("forceCloseShiftModal");
+    const content = document.getElementById("forceCloseShiftModalContent");
+    modal.classList.remove("hidden");
+    modal.classList.add("flex");
+    setTimeout(() => content.classList.remove("scale-95"), 10);
+  }
+
+  function closeForceCloseShiftModal() {
+    const modal = document.getElementById("forceCloseShiftModal");
+    const content = document.getElementById("forceCloseShiftModalContent");
+    content.classList.add("scale-95");
+    setTimeout(() => {
+      modal.classList.add("hidden");
+      modal.classList.remove("flex");
+      _forceClosePendingId = null;
+    }, 200);
+  }
+
+  function executeForceCloseShift() {
+    if (!_forceClosePendingId) return;
+    const catatan = document.getElementById("forceCloseShiftCatatan").value.trim();
+    if (!catatan) {
+      showToast("Catatan wajib diisi", "error");
+      return;
+    }
+    const btn = document.getElementById("btnSubmitForceClose");
+    const orig = btn.innerHTML;
+    btn.innerHTML = "Memproses...";
+    btn.disabled = true;
+
+    google.script.run
+      .withSuccessHandler(function (res) {
+        btn.innerHTML = orig;
+        btn.disabled = false;
+        if (res && res.success) {
+          showToast("Shift berhasil di-force close");
+          closeForceCloseShiftModal();
+          loadShiftRekap();
+        } else {
+          showToast(res ? res.message : "Gagal force close", "error");
+        }
+      })
+      .withFailureHandler(function (err) {
+        btn.innerHTML = orig;
+        btn.disabled = false;
+        showToast("Error: " + err.message, "error");
+      })
+      .forceCloseShift(currentUser.token, _forceClosePendingId, catatan);
   }
 
 </script>
