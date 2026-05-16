@@ -21,6 +21,7 @@
   let autoRefreshInterval = null; // [OPT] Auto-refresh polling
   let draftSaveInterval = null; // [OPT] Draft auto-save
   let pendingPelunasanId = null; // [FIX] Deklarasi eksplisit
+  let currentShift = null; // Shift state
 
   // [OPT] Lazy-load ApexCharts + jsPDF — hanya dimuat saat tab Laporan pertama kali dibuka
   // Menghemat ~400KB di initial page load, UI menjadi interaktif jauh lebih cepat
@@ -649,12 +650,19 @@
               allCustomers = custData;
               customersCacheTime = Date.now();
             }
+            if (bundle.activeShift !== undefined) {
+              currentShift = bundle.activeShift;
+              updateShiftBanner();
+            }
           } else {
             // Fallback: panggil individual jika bundle gagal
             loadSettings();
             loadTransactions(true);
             fetchPaket();
             fetchCustomers(true);
+            google.script.run.withSuccessHandler(res => {
+              if (res && res.success) { currentShift = res.data; updateShiftBanner(); }
+            }).getActiveShiftAPI(currentUser.token);
           }
         })
         .withFailureHandler(function(err) {
@@ -663,6 +671,10 @@
           loadSettings();
           loadTransactions(true);
           fetchPaket();
+          fetchCustomers(true);
+          google.script.run.withSuccessHandler(res => {
+            if (res && res.success) { currentShift = res.data; updateShiftBanner(); }
+          }).getActiveShiftAPI(currentUser.token);
         })
         .getDashboardBundle(currentUser.token);
 
@@ -2607,6 +2619,8 @@ Terima kasih.`;
   let pendingTxExtra = null;
 
   function previewTransaksi() {
+    if (!checkActiveShiftBeforeTransaction()) return;
+
     const cName = document.getElementById("custName").value.trim();
     const wa = document.getElementById("custWA").value.trim();
     const method = document.getElementById("payMethod").value;
@@ -4436,6 +4450,155 @@ Terima kasih.`;
         showToast("Error koneksi: " + err.message, "error");
       })
       .deletePengeluaran(currentUser.token, id);
+  }
+
+  // ==========================================
+  // SHIFT MANAGEMENT FUNCTIONS
+  // ==========================================
+  function updateShiftBanner() {
+    const banner = document.getElementById("shiftBanner");
+    const title = document.getElementById("shiftBannerTitle");
+    const subtitle = document.getElementById("shiftBannerSubtitle");
+    const iconWrap = document.getElementById("shiftIconWrap");
+    const btn = document.getElementById("shiftBannerActionBtn");
+    
+    if (!banner) return;
+    banner.classList.remove("hidden");
+    
+    if (currentShift) {
+      iconWrap.className = "w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 bg-emerald-100 text-emerald-600";
+      iconWrap.innerHTML = `<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>`;
+      title.innerText = "Shift Aktif";
+      title.className = "text-lg font-black text-emerald-700";
+      
+      const st = new Date(currentShift.waktu_mulai);
+      subtitle.innerText = "Mulai: " + (!isNaN(st) ? st.toLocaleString("id-ID") : currentShift.waktu_mulai);
+      
+      btn.innerText = "Tutup Shift";
+      btn.className = "w-full md:w-auto px-6 py-3 rounded-xl font-bold text-sm transition-all active:scale-95 shadow-lg bg-red-100 text-red-600 hover:bg-red-200 border border-red-200";
+      btn.onclick = openCloseShiftModal;
+    } else {
+      iconWrap.className = "w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 bg-amber-100 text-amber-600";
+      iconWrap.innerHTML = `<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>`;
+      title.innerText = "Shift Belum Dibuka";
+      title.className = "text-lg font-black text-amber-700";
+      subtitle.innerText = "Buka shift untuk memulai transaksi";
+      
+      btn.innerText = "Buka Shift";
+      btn.className = "w-full md:w-auto px-6 py-3 rounded-xl font-bold text-sm transition-all active:scale-95 shadow-lg bg-blue-600 text-white hover:bg-blue-700";
+      btn.onclick = openOpenShiftModal;
+    }
+  }
+
+  function openOpenShiftModal() {
+    document.getElementById("openShiftModal").classList.remove("hidden");
+    document.getElementById("openShiftModal").classList.add("flex");
+    setTimeout(() => {
+      document.getElementById("openShiftModalContent").classList.remove("scale-95");
+      document.getElementById("shiftModalAwal").focus();
+    }, 10);
+  }
+
+  function closeOpenShiftModal() {
+    document.getElementById("openShiftModalContent").classList.add("scale-95");
+    setTimeout(() => {
+      document.getElementById("openShiftModal").classList.add("hidden");
+      document.getElementById("openShiftModal").classList.remove("flex");
+      document.getElementById("shiftModalAwal").value = "";
+    }, 200);
+  }
+
+  function executeOpenShift() {
+    const modalAwal = document.getElementById("shiftModalAwal").value;
+    const btn = document.getElementById("btnSubmitOpenShift");
+    const origText = btn.innerHTML;
+    btn.innerHTML = "Membuka...";
+    btn.disabled = true;
+    
+    google.script.run
+      .withSuccessHandler(function(res) {
+        btn.innerHTML = origText;
+        btn.disabled = false;
+        if (res && res.success) {
+          showToast(res.message);
+          closeOpenShiftModal();
+          setupDashboard(); 
+        } else {
+          showToast(res ? res.message : "Gagal membuka shift", "error");
+        }
+      })
+      .withFailureHandler(function(err) {
+        btn.innerHTML = origText;
+        btn.disabled = false;
+        showToast("Error: " + err.message, "error");
+      })
+      .openShift(currentUser.token, modalAwal);
+  }
+
+  function openCloseShiftModal() {
+    document.getElementById("closeShiftModal").classList.remove("hidden");
+    document.getElementById("closeShiftModal").classList.add("flex");
+    setTimeout(() => {
+      document.getElementById("closeShiftModalContent").classList.remove("scale-95");
+      document.getElementById("shiftCatatan").focus();
+    }, 10);
+  }
+
+  function closeCloseShiftModal() {
+    document.getElementById("closeShiftModalContent").classList.add("scale-95");
+    setTimeout(() => {
+      document.getElementById("closeShiftModal").classList.add("hidden");
+      document.getElementById("closeShiftModal").classList.remove("flex");
+      document.getElementById("shiftCatatan").value = "";
+    }, 200);
+  }
+
+  function executeCloseShift() {
+    if (!currentShift) return;
+    const catatan = document.getElementById("shiftCatatan").value;
+    const btn = document.getElementById("btnSubmitCloseShift");
+    const origText = btn.innerHTML;
+    btn.innerHTML = "Menutup...";
+    btn.disabled = true;
+    
+    google.script.run
+      .withSuccessHandler(function(res) {
+        btn.innerHTML = origText;
+        btn.disabled = false;
+        if (res && res.success) {
+          showToast(res.message);
+          closeCloseShiftModal();
+          currentShift = null;
+          updateShiftBanner();
+          
+          if (res.summary) {
+             setTimeout(() => {
+                showToast(`Trx: ${res.summary.jumlahOrder} | Tunai: Rp ${res.summary.totalTunai.toLocaleString('id-ID')}`, "success");
+             }, 3500);
+          }
+        } else {
+          showToast(res ? res.message : "Gagal menutup shift", "error");
+        }
+      })
+      .withFailureHandler(function(err) {
+        btn.innerHTML = origText;
+        btn.disabled = false;
+        showToast("Error: " + err.message, "error");
+      })
+      .closeShift(currentUser.token, currentShift.id, catatan);
+  }
+
+  function checkActiveShiftBeforeTransaction() {
+    if (!currentShift) {
+      showToast("Anda belum membuka shift. Silakan buka shift terlebih dahulu.", "error");
+      const banner = document.getElementById("shiftBanner");
+      if (banner) {
+         banner.classList.add("ring-4", "ring-amber-500/50", "animate-pulse");
+         setTimeout(() => banner.classList.remove("ring-4", "ring-amber-500/50", "animate-pulse"), 2000);
+      }
+      return false;
+    }
+    return true;
   }
 
 </script>
