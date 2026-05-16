@@ -679,7 +679,8 @@
       }
 
       try { showSection("overview"); } catch (e) { console.error("[setupDashboard] showSection:", e); }
-      try { fetchCustomers(); } catch (e) { console.error("[setupDashboard] fetchCustomers:", e); }
+      // [PERF] Hapus fetchCustomers() di sini — getDashboardBundle sudah memuat customers.
+      // Tab Pelanggan akan render dari allCustomers saat user pertama kali buka tab itu.
 
       // [OPT] WAVE 2: getDashboardBundle — 1 GAS call menggantikan 3 serial call
       // (loadSettings + loadTransactions + fetchPaket) → getDashboardBundle
@@ -901,7 +902,12 @@
     try {
       localStorage.removeItem("l_premium_settings_cache");
     } catch (e) {}
+    // [PERF] Hapus session cache transaksi
+    try { sessionStorage.removeItem("trx_cache_v1"); } catch (e) {}
     transactionsCacheTime = 0;
+    allTransactions = [];
+    allCustomers = [];
+    allPackages = [];
     // [OPT] Hentikan semua interval
     if (autoRefreshInterval) {
       clearInterval(autoRefreshInterval);
@@ -1546,6 +1552,24 @@
       return;
     }
 
+    // [PERF] Hydrate dari sessionStorage agar refresh page tidak hilangkan dashboard
+    if (!forceRefresh && allTransactions.length === 0) {
+      try {
+        const cached = sessionStorage.getItem("trx_cache_v1");
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (parsed && parsed.data && parsed._ts && now - parsed._ts < TRX_CACHE_TTL * 3) {
+            allTransactions = parsed.data;
+            transactionsCacheTime = parsed._ts;
+            updateOverviewStats();
+            updateRecentActivity();
+            // Tetap fetch fresh di background
+            forceRefresh = true;
+          }
+        }
+      } catch (e) { /* ignore */ }
+    }
+
     // [P0] Silent refresh — hanya tampilkan loading global saat pertama kali (data kosong)
     // Auto-refresh setiap 1 menit tidak boleh memblokir UI
     const isFirstLoad = allTransactions.length === 0;
@@ -1564,6 +1588,13 @@
         }
         allTransactions = data;
         transactionsCacheTime = Date.now(); // [P1] Catat waktu cache
+        // [PERF] Persist ke sessionStorage untuk hydration berikutnya
+        try {
+          sessionStorage.setItem("trx_cache_v1", JSON.stringify({
+            data: data,
+            _ts: transactionsCacheTime,
+          }));
+        } catch (e) { /* sessionStorage full atau di-disable, abaikan */ }
         updateOverviewStats();
         updateRecentActivity();
         // Tampilkan timestamp terakhir diperbarui
@@ -4814,14 +4845,15 @@ Terima kasih.`;
       const s = data[i];
       const isAktif = s.status === "Aktif";
       const isForce = s.status === "Force-Closed";
+      // [PERF] Untuk shift Aktif pakai live_summary; selain itu pakai data persisted dari sheet
       const summary = s.live_summary || {
         totalTransaksi: s.total_transaksi,
         totalTunai: s.total_tunai,
         totalNonTunai: s.total_non_tunai,
         jumlahOrder: s.jumlah_order,
         modalAwal: s.modal_awal,
-        totalPengeluaran: 0,
-        saldoAkhir: (parseInt(s.modal_awal) || 0) + (parseInt(s.total_tunai) || 0),
+        totalPengeluaran: parseInt(s.total_pengeluaran) || 0,
+        saldoAkhir: parseInt(s.saldo_akhir) || ((parseInt(s.modal_awal) || 0) + (parseInt(s.total_tunai) || 0) - (parseInt(s.total_pengeluaran) || 0)),
       };
       const badge = isAktif
         ? `<span class="bg-emerald-50 text-emerald-600 border border-emerald-200 text-[9px] font-bold uppercase tracking-wider px-2 py-1 rounded">Aktif</span>`

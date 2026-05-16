@@ -362,6 +362,8 @@ function setupDatabase() {
           "jumlah_order",
           "status",
           "catatan",
+          "total_pengeluaran",
+          "saldo_akhir",
         ]);
       }
     } else if (name === "packages") {
@@ -398,6 +400,23 @@ function setupDatabase() {
       if (headers2.indexOf("pelunasan_shift_id") === -1) {
         const sCol = sheet.getLastColumn() + 1;
         sheet.getRange(1, sCol).setValue("pelunasan_shift_id");
+      }
+    } else if (name === "shifts") {
+      // Migration: tambah kolom total_pengeluaran (col M/13) & saldo_akhir (col N/14)
+      // agar getShiftHistory tidak perlu recompute pengeluaran untuk shift sudah ditutup.
+      const headers = sheet
+        .getRange(1, 1, 1, sheet.getLastColumn())
+        .getValues()[0];
+      if (headers.indexOf("total_pengeluaran") === -1) {
+        const sCol = sheet.getLastColumn() + 1;
+        sheet.getRange(1, sCol).setValue("total_pengeluaran");
+      }
+      const headers2 = sheet
+        .getRange(1, 1, 1, sheet.getLastColumn())
+        .getValues()[0];
+      if (headers2.indexOf("saldo_akhir") === -1) {
+        const sCol = sheet.getLastColumn() + 1;
+        sheet.getRange(1, sCol).setValue("saldo_akhir");
       }
     }
   });
@@ -1763,8 +1782,8 @@ function closeShift(token, shiftId, catatan) {
     const summary = computeShiftSummary_(shiftId, modalAwal);
     const now = new Date().toISOString();
 
-    // [OPT] Batch write — 7 setValue → 1 setValues
-    const existingRow = sheet.getRange(rowIndex, 1, 1, 12).getValues()[0];
+    // [OPT] Batch write — 9 setValue → 1 setValues (termasuk total_pengeluaran & saldo_akhir)
+    const existingRow = sheet.getRange(rowIndex, 1, 1, 14).getValues()[0];
     existingRow[4] = now;
     existingRow[6] = summary.totalTransaksi;
     existingRow[7] = summary.totalTunai;
@@ -1772,7 +1791,9 @@ function closeShift(token, shiftId, catatan) {
     existingRow[9] = summary.jumlahOrder;
     existingRow[10] = "Selesai";
     existingRow[11] = catatan || "";
-    sheet.getRange(rowIndex, 1, 1, 12).setValues([existingRow]);
+    existingRow[12] = summary.totalPengeluaran || 0;
+    existingRow[13] = summary.saldoAkhir || 0;
+    sheet.getRange(rowIndex, 1, 1, 14).setValues([existingRow]);
 
     return {
       success: true,
@@ -1814,7 +1835,7 @@ function forceCloseShift(token, shiftId, catatan) {
     const now = new Date().toISOString();
     const noteFinal = (catatan ? catatan + " — " : "") + "[Force-closed by admin]";
 
-    const existingRow = sheet.getRange(rowIndex, 1, 1, 12).getValues()[0];
+    const existingRow = sheet.getRange(rowIndex, 1, 1, 14).getValues()[0];
     existingRow[4] = now;
     existingRow[6] = summary.totalTransaksi;
     existingRow[7] = summary.totalTunai;
@@ -1822,7 +1843,9 @@ function forceCloseShift(token, shiftId, catatan) {
     existingRow[9] = summary.jumlahOrder;
     existingRow[10] = "Force-Closed";
     existingRow[11] = noteFinal;
-    sheet.getRange(rowIndex, 1, 1, 12).setValues([existingRow]);
+    existingRow[12] = summary.totalPengeluaran || 0;
+    existingRow[13] = summary.saldoAkhir || 0;
+    sheet.getRange(rowIndex, 1, 1, 14).setValues([existingRow]);
 
     return {
       success: true,
@@ -1845,7 +1868,7 @@ function getShiftHistory(token, startDateStr, endDateStr) {
     const lastRow = sheet.getLastRow();
     if (lastRow <= 1) return { success: true, data: [] };
 
-    const data = sheet.getRange(2, 1, lastRow - 1, 12).getValues();
+    const data = sheet.getRange(2, 1, lastRow - 1, 14).getValues();
     let startD = startDateStr ? new Date(startDateStr) : null;
     if (startD) startD.setHours(0, 0, 0, 0);
     let endD = endDateStr ? new Date(endDateStr) : null;
@@ -1862,7 +1885,8 @@ function getShiftHistory(token, startDateStr, endDateStr) {
       const status = String(r[10] || "");
       const modalAwal = parseInt(r[5]) || 0;
       let summary = null;
-      // Untuk shift yang masih aktif, hitung preview real-time
+      // Untuk shift yang masih aktif, hitung preview real-time.
+      // Shift Selesai/Force-Closed pakai data persisted di kolom 13-14 (total_pengeluaran, saldo_akhir).
       if (status === "Aktif") {
         summary = computeShiftSummary_(r[0], modalAwal);
       }
@@ -1880,6 +1904,8 @@ function getShiftHistory(token, startDateStr, endDateStr) {
         jumlah_order: parseInt(r[9]) || 0,
         status: status,
         catatan: String(r[11] || ""),
+        total_pengeluaran: parseInt(r[12]) || 0,
+        saldo_akhir: parseInt(r[13]) || 0,
         live_summary: summary, // null untuk shift yang sudah ditutup
       });
     }
@@ -1907,7 +1933,7 @@ function autoCloseExpiredShifts() {
     const lastRow = sheet.getLastRow();
     if (lastRow <= 1) return;
 
-    const data = sheet.getRange(2, 1, lastRow - 1, 12).getValues();
+    const data = sheet.getRange(2, 1, lastRow - 1, 14).getValues();
     const now = new Date().toISOString();
     let closedCount = 0;
 
@@ -1930,8 +1956,10 @@ function autoCloseExpiredShifts() {
         summary.jumlahOrder,
         "Force-Closed",
         "[Auto-closed sistem]",
+        summary.totalPengeluaran || 0,
+        summary.saldoAkhir || 0,
       ];
-      sheet.getRange(rowIndex, 1, 1, 12).setValues([updatedRow]);
+      sheet.getRange(rowIndex, 1, 1, 14).setValues([updatedRow]);
       closedCount++;
     }
     if (closedCount > 0) logError("autoCloseExpiredShifts", "Closed " + closedCount + " shifts", "");
