@@ -1,318 +1,576 @@
 <div align="center">
-  <img src="https://img.shields.io/badge/Google_Apps_Script-4285F4?style=for-the-badge&logo=google&logoColor=white" alt="Google Apps Script" />
-  <img src="https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white" alt="Tailwind CSS" />
-  <img src="https://img.shields.io/badge/JavaScript-F7DF1E?style=for-the-badge&logo=javascript&logoColor=black" alt="JavaScript" />
-  <img src="https://img.shields.io/badge/HTML5-E34F26?style=for-the-badge&logo=html5&logoColor=white" alt="HTML5" />
-</div>
+
+<!-- Logo placeholder — ganti dengan logo asli jika tersedia -->
+<img src="https://api.iconify.design/mdi:tshirt-crew.svg?color=%232563eb&height=96" alt="Kucucikan Laundry POS Logo" height="96" />
+
+# Kucucikan Laundry POS
+
+### Sistem Kasir & Manajemen Operasional Laundry Berbasis Cloud
+
+_Enterprise-grade Point of Sale, dibangun di atas Google Apps Script — tanpa server, tanpa biaya hosting, tetap cepat dan andal._
 
 <br />
 
-<h1 align="center">L-Premium POS — Laundry Point of Sale</h1>
+[![Google Apps Script](https://img.shields.io/badge/Google_Apps_Script-4285F4?style=for-the-badge&logo=google&logoColor=white)](https://script.google.com/)
+[![JavaScript](https://img.shields.io/badge/JavaScript-F7DF1E?style=for-the-badge&logo=javascript&logoColor=black)](https://developer.mozilla.org/en-US/docs/Web/JavaScript)
+[![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS_v4-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)](https://tailwindcss.com/)
+[![HTML5](https://img.shields.io/badge/HTML5-E34F26?style=for-the-badge&logo=html5&logoColor=white)](https://developer.mozilla.org/en-US/docs/Web/HTML)
+[![Google Sheets](https://img.shields.io/badge/Google_Sheets-34A853?style=for-the-badge&logo=google-sheets&logoColor=white)](https://sheets.google.com/)
 
-<p align="center">
-  <strong>Enterprise-Grade Laundry Management System</strong><br>
-  Sistem kasir berbasis web untuk bisnis laundry modern. Dibangun di atas
-  arsitektur serverless Google Apps Script dengan UI/UX premium yang
-  responsif, aman, dan cepat.
-</p>
+<br />
+
+[![Status](https://img.shields.io/badge/status-production_ready-success?style=flat-square)](#)
+[![Version](https://img.shields.io/badge/version-2.1-blue?style=flat-square)](#changelog)
+[![Runtime](https://img.shields.io/badge/runtime-V8-orange?style=flat-square)](#)
+[![Timezone](https://img.shields.io/badge/timezone-Asia%2FJakarta-violet?style=flat-square)](#)
+[![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)](#license)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)](#contributing)
+
+<br />
+
+[Fitur](#-fitur-utama) ·
+[Demo](#-screenshots--demo) ·
+[Arsitektur](#-arsitektur--performa) ·
+[Instalasi](#-instalasi--deployment) ·
+[Skema DB](#-skema-database) ·
+[Changelog](#-changelog)
+
+</div>
 
 ---
 
-## Ringkasan Proyek
+## Daftar Isi
 
-**L-Premium POS** adalah solusi end-to-end untuk manajemen operasional
-laundry. Memanfaatkan ekosistem **Google Workspace** (Google Sheets sebagai
-database, Apps Script sebagai backend), aplikasi ini gratis untuk di-host
-namun tetap memenuhi standar keamanan dan performa aplikasi berbayar.
+- [Tentang Proyek](#-tentang-proyek)
+- [Fitur Utama](#-fitur-utama)
+- [Screenshots & Demo](#-screenshots--demo)
+- [Tech Stack](#-tech-stack)
+- [Arsitektur & Performa](#-arsitektur--performa)
+- [Skema Database](#-skema-database)
+- [Instalasi & Deployment](#-instalasi--deployment)
+- [Konfigurasi Pasca-Deploy](#-konfigurasi-pasca-deploy)
+- [Workflow Pengembangan](#-workflow-pengembangan)
+- [Kredensial Default](#-kredensial-default)
+- [Roadmap](#-roadmap)
+- [Changelog](#-changelog)
+- [Contributing](#-contributing)
+- [License](#-license)
 
-Aplikasi ini telah melalui evaluasi senior full-stack dengan fokus pada
-performa (concurrency, caching, batching), reliabilitas (lock service,
-defensive error handling), dan UX (skeleton loading, optimistic updates).
+---
+
+## Tentang Proyek
+
+**Kucucikan Laundry POS** adalah sistem kasir _end-to-end_ untuk bisnis
+laundry yang mengeliminasi kebutuhan server konvensional dengan
+memanfaatkan ekosistem Google Workspace:
+
+- **Google Sheets** sebagai database relasional
+- **Google Apps Script** sebagai backend serverless
+- **Web App URL** sebagai endpoint produksi
+
+Hasilnya: aplikasi POS siap pakai dengan _zero infrastructure cost_, namun
+tetap memenuhi standar profesional dalam keamanan (token-based auth,
+hashed passwords, server-side validation), performa (multi-layer caching,
+batch operations, lazy loading), dan akuntabilitas (shift management,
+audit log, auto-backup).
+
+> Cocok untuk UMKM laundry dengan 1–3 kasir aktif yang membutuhkan sistem
+> POS profesional tanpa biaya berlangganan bulanan.
 
 ---
 
 ## Fitur Utama
 
-### Manajemen Transaksi & Kasir
-- **Kalkulasi otomatis** — perhitungan tagihan, diskon, dan kembalian
-  secara instan
-- **Pembayaran fleksibel** — pelunasan langsung atau DP dengan metode
-  Tunai, Transfer, atau QRIS
-- **Auto-save draft** — form transaksi otomatis tersimpan ke localStorage
-  setiap 5 detik agar tidak hilang saat browser crash
-- **Cetak nota digital** — siap cetak ke printer thermal kasir atau kirim
-  via WhatsApp
-- **Konfirmasi WhatsApp** — kirim bukti transaksi & notifikasi update
-  status ke pelanggan dengan satu klik
+<table>
+<tr>
+<td width="50%" valign="top">
+
+### Manajemen Transaksi
+- Kalkulasi otomatis tagihan, diskon, kembalian
+- Pembayaran fleksibel: Tunai, Transfer, QRIS
+- Sistem DP (Down Payment) dan pelunasan
+- Multi-item per transaksi (kiloan + satuan)
+- Auto-save draft tiap 5 detik (anti-crash)
+- Cetak nota digital (thermal-ready)
+- Konfirmasi WhatsApp dengan template kustom
 
 ### Manajemen Pelanggan
-- Pendataan pelanggan dengan nomor WhatsApp ternormalisasi
-- Pelacakan riwayat transaksi & total pengeluaran (total spent) per
-  pelanggan
+- CRUD pelanggan dengan WA ternormalisasi
+- Riwayat transaksi & total spent per pelanggan
+- Auto-suggest saat input transaksi baru
+- Badge VIP otomatis untuk pelanggan loyal
 
 ### Manajemen Layanan
-- **Katalog dinamis** — tambah, edit, dan toggle aktif/nonaktif paket
-  layanan (kiloan, satuan)
-- Harga, satuan, durasi, dan kategori per paket dengan optimistic UI
-  update saat toggle status
+- Katalog dinamis (kiloan, satuan, kategori)
+- Toggle aktif/nonaktif dengan optimistic UI
+- Indikator popularitas paket
+- Migration kolom otomatis untuk skema baru
 
-### Manajemen Shift Kasir _(baru)_
-- **Buka shift** — kasir wajib membuka shift dengan mencatat modal awal
-  sebelum dapat memproses transaksi
-- **Tutup shift dengan rekap otomatis** — modal awal, total tunai, total
-  non-tunai, total pengeluaran, dan **saldo akhir** dihitung otomatis
-- **Atribusi pelunasan akurat** — pelunasan transaksi yang dilakukan di
-  shift berbeda tetap tercatat ke shift yang menerima uang (kolom
-  `pelunasan_shift_id`)
-- **Force-close oleh admin** — admin dapat menutup paksa shift yang lupa
-  ditutup oleh kasir (status: `Force-Closed`)
-- **Auto-close harian** — trigger otomatis pukul 23:50 menutup semua
-  shift yang masih aktif sebagai fail-safe
-- **Rekap shift admin** — tab khusus di halaman Laporan menampilkan
-  semua shift 30 hari terakhir dengan live preview untuk shift aktif
-- **Bypass admin** — role admin tidak terikat shift untuk fleksibilitas
-  operasional
+</td>
+<td width="50%" valign="top">
 
-### Dasbor Analitik (Admin)
-- Pantau real-time omzet hari ini, total transaksi, antrean diproses,
-  dan cucian siap diambil
-- **Multi-cashier sync** — auto-refresh dasbor setiap 1 menit
-- **Laporan periodik** — generate rekapitulasi harian, mingguan, bulanan
-  ke format CSV atau PDF
-- **Manajemen kas harian** — uang awal, pengeluaran kategorial dengan
-  estimasi saldo aktual
-- **Manajemen pegawai** — CRUD akun staff dengan role admin/kasir
+### Shift Management _(NEW)_
+- Buka shift dengan modal awal kas
+- Tutup shift dengan rekap saldo akhir otomatis
+- Atribusi pelunasan akurat antar shift
+- Force-close oleh admin untuk shift terbengkalai
+- Auto-close trigger harian pukul 23:50
+- Tab Rekap Shift di laporan admin
+- Bypass otomatis untuk role admin
 
----
+### Dasbor Analitik
+- Real-time omzet, antrean, target hari ini
+- Multi-cashier sync (auto-refresh 1 menit)
+- Tren pendapatan + chart layanan terlaris
+- Export laporan CSV / PDF (lazy-loaded)
+- Manajemen kas harian (uang awal & pengeluaran)
+- Estimasi saldo real-time
 
-## UI/UX & Design System
+### Administrasi
+- Manajemen pegawai (admin/kasir)
+- Pengaturan toko (nama, logo, rekening)
+- Template WhatsApp kustom dengan placeholder
+- Auto-backup harian ke Google Drive
+- Error logging silent ke sheet khusus
 
-Aplikasi memakai **Tailwind CSS v4** dengan pendekatan _enterprise SaaS-grade interface_:
-
-- **Vibrant & clean design** — palet warna terkurasi, white-space lega,
-  tipografi modern (Plus Jakarta Sans)
-- **Visual hierarchy** — `rounded-2xl` konsisten, glow focus pada input,
-  ikon SVG inline (Heroicons) untuk ketajaman visual maksimal
-- **Micro-animations** — transisi halus pada hover, button press, modal
-  scale-in, dan skeleton loading saat fetching
-- **Audio cues** — beep asinkron via Web Audio API saat transaksi sukses
-- **Accessibility-conscious** — focus trap di modal, aria-labels,
-  semantic HTML
+</td>
+</tr>
+</table>
 
 ---
 
-## Arsitektur & Performa Sistem
+## Screenshots & Demo
 
-### 1. Integritas Data (Zero Collision)
-- **UUID primary keys** — semua ID transaksi/customer/paket pakai UUID,
-  mencegah tabrakan saat 2 kasir menyimpan di milidetik yang sama
-- **LockService concurrency control** — semua operasi tulis kritis
-  (createTransaction, lunasDanAmbil, openShift, closeShift) dibungkus
-  `LockService.getScriptLock()` untuk serialize akses
-- **Double-submit prevention** — state guard di sisi klien mencegah
-  duplikasi transaksi akibat klik ganda
-- **Server-side trust** — validasi pembayaran, perhitungan total, dan
-  diskon dilakukan ulang di server, mencegah manipulasi dari DevTools
+> _Screenshot dapat ditambahkan di folder `docs/screenshots/` dan
+> direferensikan di sini._
 
-### 2. Performance Optimization
-- **Batch sheet operations** — multiple `setValue` digabung jadi 1
-  `setValues([...])`, peningkatan kecepatan tulis 400-600%
-- **getDashboardBundle** — 1 GAS call menggantikan 3-4 serial call
-  (transactions + packages + settings + customers + activeShift),
-  hemat 2-8 detik per login
-- **Date-bounding query** — `getTransactions` hanya membaca 300 baris
-  terbaru, tetap cepat meski database punya puluhan ribu baris
-- **3-layer caching strategy:**
-  1. **Server cache** — referensi spreadsheet & customer list (TTL 2
-     menit) di `CacheService`
-  2. **Client RAM cache** — transaksi (TTL 1 menit) & customers (TTL 2
-     menit), navigasi tab terasa instant
-  3. **localStorage cache** — settings aplikasi (TTL 1 jam) untuk
-     mempercepat cold start
-- **Lazy-load heavy libs** — ApexCharts & jsPDF (~400KB) hanya dimuat
-  saat tab Laporan dibuka pertama kali
-- **Optimistic UI** — toggle status paket update langsung di UI tanpa
-  menunggu response server
-
-### 3. Reliability & Maintenance
-- **Defensive setupDashboard** — initialization dibungkus per-blok
-  try/catch, dashboard tetap muncul walau ada satu fungsi yang error
-- **Silent error logging** — exception server otomatis tercatat di
-  sheet `error_logs` untuk debugging tanpa mengganggu kasir
-- **Auto-backup harian** — trigger CRON menduplikasi spreadsheet ke
-  Google Drive setiap pukul 02:00
-- **Auto-close shift** — trigger harian 23:50 mencegah shift terlupa
-  dan saldo kas terdistorsi
-- **LF-only line endings** — `.gitattributes` memaksa LF di semua file
-  text untuk mencegah parser GAS pecah saat menerima CRLF dalam
-  inline `<script>`
-
-### 4. Security
-- **Token-based session** — login menghasilkan UUID token tersimpan di
-  `CacheService` dengan TTL 8 jam, di-rolling tiap aktivitas
-- **Hash + salt password** — semua password di-hash sebelum disimpan,
-  auto-migrasi format lama ke salted hash saat login berhasil
-- **Login rate limit** — 5x percobaan gagal mengunci akun selama 15
-  menit
-- **Admin-only guards** — `validateAdminSession_()` di semua endpoint
-  sensitif (deleteTransaction, getUsersList, forceCloseShift,
-  getShiftHistory)
-- **DB_ID di Script Properties** — bukan hardcoded di source, dengan
-  auto-migrasi sekali jalan
+<table>
+<tr>
+<td align="center" width="33%">
+<strong>Login</strong><br/>
+<sub>Halaman masuk dengan branding kustom</sub>
+</td>
+<td align="center" width="33%">
+<strong>Dasbor Overview</strong><br/>
+<sub>Pantau omzet & antrean real-time</sub>
+</td>
+<td align="center" width="33%">
+<strong>Halaman Transaksi</strong><br/>
+<sub>Input cepat dengan auto-suggest</sub>
+</td>
+</tr>
+<tr>
+<td align="center">
+<strong>Banner Shift</strong><br/>
+<sub>Status & rekap aktif</sub>
+</td>
+<td align="center">
+<strong>Rekap Shift Admin</strong><br/>
+<sub>Riwayat & force-close</sub>
+</td>
+<td align="center">
+<strong>Modal Saldo Akhir</strong><br/>
+<sub>Penghitungan otomatis tutup shift</sub>
+</td>
+</tr>
+</table>
 
 ---
 
-## Struktur File Repository
+## Tech Stack
 
-```text
-app-script-mpti/
-├── appsscript.json     # Manifest Apps Script (timezone, runtime, webapp)
-├── Kode.js             # Server-side: CRUD, auth, shift, caching
-├── index.html          # Struktur HTML (layout, sidebar, modal)
-├── CSS.html            # Custom CSS, font imports, print media queries
-├── JavaScript.html     # Client-side: SPA navigation, state, event handlers
-├── Tailwind.html       # Pre-built Tailwind CSS (di-generate via build script)
-├── input.css           # Tailwind source untuk build
-├── build-tailwind.js   # Build script Tailwind → Tailwind.html
-├── .gitattributes      # Enforce LF line endings di semua file
-└── .claspignore        # File yang dikecualikan dari clasp push
+| Layer | Teknologi |
+|-------|-----------|
+| **Backend** | Google Apps Script (V8 Runtime), JavaScript |
+| **Database** | Google Sheets (8 sheets relasional) |
+| **Frontend** | HTML5, JavaScript ES2020, Tailwind CSS v4.2.3 |
+| **Charts** | ApexCharts (lazy-loaded) |
+| **PDF Export** | jsPDF + jsPDF-AutoTable (lazy-loaded) |
+| **Tooling** | clasp (CLI), npm, Tailwind CLI |
+| **Hosting** | Google Workspace (Web App URL) |
+| **Concurrency** | LockService (Apps Script) |
+| **Caching** | CacheService + localStorage + RAM |
+
+---
+
+## Arsitektur & Performa
+
+### Diagram Arsitektur
+
 ```
+┌─────────────────────────────────────────────────────────────┐
+│                       Browser (Client)                        │
+│  ┌─────────────┐  ┌──────────────┐  ┌──────────────────────┐ │
+│  │ index.html  │  │ JavaScript   │  │ localStorage Cache    │ │
+│  │ + CSS       │  │ (SPA, state) │  │ (settings 1h)         │ │
+│  └─────────────┘  └──────┬───────┘  └──────────────────────┘ │
+└──────────────────────────┼──────────────────────────────────┘
+                           │ google.script.run
+                           ▼
+┌─────────────────────────────────────────────────────────────┐
+│           Google Apps Script (Server, V8)                    │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │  Kode.js  —  Auth · CRUD · Shift · Reporting · Lock   │  │
+│  └──────────┬───────────────────────────────┬───────────┘  │
+│             │                               │              │
+│             ▼                               ▼              │
+│  ┌──────────────────┐          ┌──────────────────────┐   │
+│  │ CacheService     │          │ PropertiesService    │   │
+│  │ (sessions, lists)│          │ (DB_ID, secrets)     │   │
+│  └──────────────────┘          └──────────────────────┘   │
+└─────────────────────────────┬───────────────────────────────┘
+                              │ SpreadsheetApp.openById()
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│              Google Sheets (Database)                        │
+│  users · packages · transactions · settings · customers ·    │
+│  kas_awal · pengeluaran · shifts                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Pilar Optimasi
+
+#### Performance
+- **`getDashboardBundle`** — 1 RPC menggantikan 4 panggilan serial
+  (transactions + packages + settings + customers + activeShift),
+  hemat **2–8 detik** per login
+- **Batch sheet writes** — `setValues([rows])` menggantikan multiple
+  `setValue()`, percepat tulis hingga **400–600%**
+- **Date-bounding query** — `getTransactions` hanya membaca 300 baris
+  terbaru, tetap cepat di database puluhan ribu baris
+- **Lazy-load** ApexCharts (~250KB) + jsPDF (~150KB) hanya saat tab
+  Laporan dibuka, hemat ~400KB pada initial load
+- **3-layer caching**:
+  - **Server CacheService** — sesi token (8h), customer list (2m)
+  - **Client RAM** — transactions (1m), customers (2m)
+  - **localStorage** — settings (1h)
+
+#### Reliability
+- **LockService** di semua operasi tulis kritis (createTransaction,
+  lunasDanAmbil, openShift, closeShift, forceCloseShift)
+- **Defensive setupDashboard** dengan per-blok try/catch — dashboard
+  tetap muncul walau ada satu fungsi error
+- **Silent error logging** ke sheet `error_logs` untuk debugging
+  pasca-insiden tanpa mengganggu kasir
+- **Auto-backup harian** spreadsheet ke Drive pukul 02:00
+- **Auto-close shift harian** pukul 23:50 sebagai fail-safe
+
+#### Security
+- **Token-based session** dengan UUID, TTL 8 jam, rolling refresh
+- **Salted hash password** dengan auto-migrasi format lama
+- **Login rate limit** — 5 percobaan gagal mengunci 15 menit
+- **Admin-only guards** via `validateAdminSession_()` di endpoint
+  sensitif (`deleteTransaction`, `forceCloseShift`, `getUsersList`,
+  `getShiftHistory`)
+- **DB_ID** di Script Properties (bukan hardcoded), auto-migrasi
+- **Server-side trust** — perhitungan total, diskon, status validasi
+  ulang di server (mencegah manipulasi DevTools)
+
+#### Maintainability
+- **LF-only line endings** dipaksa via `.gitattributes` — mencegah
+  parser GAS pecah saat menerima CRLF dalam inline `<script>`
+- **`.claspignore`** mengecualikan file debug dari deployment
+- **Modular helpers** — `computeShiftSummary_()` dipakai di
+  closeShift/forceCloseShift/autoCloseExpiredShifts/getShiftHistory
+- **Migration scripts** — `setupDatabase()` idempoten untuk
+  menambahkan kolom baru tanpa data loss
 
 ---
 
 ## Skema Database
 
-Sheet otomatis dibuat oleh `setupDatabase()` saat first run:
+Sheet otomatis dibuat & dimigrasi oleh `setupDatabase()`:
 
-| Sheet | Kolom |
-|-------|-------|
-| `users` | username, password (hashed), role, nama |
-| `packages` | id, nama, harga, durasi, satuan, kategori, status |
-| `transactions` | id, tanggal, customer, paket, berat, total, status, kasir, whatsapp, satuan, estimasi, metode_pembayaran, status_pembayaran, metode_pelunasan, _, catatan, terbayar, items_json, tanggal_pelunasan, nominal_dp, nominal_pelunasan, **shift_id**, **pelunasan_shift_id** |
-| `settings` | key, value |
-| `customers` | id, nama, whatsapp, terakhir_order |
-| `kas_awal` | tanggal, nominal, kasir |
-| `pengeluaran` | id, tanggal, keterangan, kategori, jumlah, kasir |
-| `shifts` | id, kasir, nama_kasir, waktu_mulai, waktu_selesai, modal_awal, total_transaksi, total_tunai, total_non_tunai, jumlah_order, status, catatan |
+<details>
+<summary><b>Sheet: <code>users</code></b></summary>
+
+| Kolom | Tipe | Keterangan |
+|-------|------|------------|
+| username | string | Primary key (case-insensitive) |
+| password | string | Salted hash format `salt:hash` |
+| role | enum | `admin` / `kasir` |
+| nama | string | Display name |
+
+</details>
+
+<details>
+<summary><b>Sheet: <code>packages</code></b></summary>
+
+| Kolom | Tipe | Keterangan |
+|-------|------|------------|
+| id | UUID | Primary key |
+| nama_paket | string | Nama layanan |
+| harga | int | Tarif per satuan |
+| durasi_hari | int | Estimasi proses (hari) |
+| satuan | string | Kg / Pcs / Set |
+| kategori | string | Tag pengelompokan |
+| status | enum | `Aktif` / `Nonaktif` |
+
+</details>
+
+<details>
+<summary><b>Sheet: <code>transactions</code> (23 kolom)</b></summary>
+
+| # | Kolom | Tipe |
+|---|-------|------|
+| 1 | id | UUID |
+| 2 | tanggal | ISO datetime |
+| 3 | customer | string |
+| 4 | paket | string (legacy single-item) |
+| 5 | berat | float (legacy) |
+| 6 | total | int |
+| 7 | status | `Proses`/`Selesai`/`Diambil` |
+| 8 | kasir | username |
+| 9 | whatsapp | string |
+| 10 | satuan | string |
+| 11 | estimasi_selesai | ISO datetime |
+| 12 | metode_pembayaran | string |
+| 13 | status_pembayaran | `Lunas`/`Belum Lunas` |
+| 14 | metode_pelunasan | string |
+| 15 | _(reserved)_ | — |
+| 16 | catatan | string |
+| 17 | terbayar | int |
+| 18 | items_json | JSON (multi-item) |
+| 19 | tanggal_pelunasan | ISO datetime |
+| 20 | nominal_dp | int |
+| 21 | nominal_pelunasan | int |
+| 22 | **shift_id** | UUID (FK → shifts.id) |
+| 23 | **pelunasan_shift_id** | UUID (FK → shifts.id) |
+
+</details>
+
+<details>
+<summary><b>Sheet: <code>shifts</code></b></summary>
+
+| # | Kolom | Tipe |
+|---|-------|------|
+| 1 | id | UUID |
+| 2 | kasir | username |
+| 3 | nama_kasir | string |
+| 4 | waktu_mulai | ISO datetime |
+| 5 | waktu_selesai | ISO datetime |
+| 6 | modal_awal | int |
+| 7 | total_transaksi | int |
+| 8 | total_tunai | int |
+| 9 | total_non_tunai | int |
+| 10 | jumlah_order | int |
+| 11 | status | `Aktif`/`Selesai`/`Force-Closed` |
+| 12 | catatan | string |
+
+</details>
+
+<details>
+<summary><b>Sheet lainnya</b></summary>
+
+- **`settings`** — `key`, `value` (config aplikasi)
+- **`customers`** — `id`, `nama`, `whatsapp`, `terakhir_order`
+- **`kas_awal`** — `tanggal`, `nominal`, `kasir`
+- **`pengeluaran`** — `id`, `tanggal`, `keterangan`, `kategori`, `jumlah`, `kasir`
+
+</details>
 
 ---
 
 ## Instalasi & Deployment
 
-Proyek dibangun menggunakan `clasp` (Command Line Apps Script Projects).
-
 ### Prasyarat
-- Node.js & npm terinstal
-- Akun Google
-- (Opsional) `npx @tailwindcss/cli` untuk build ulang Tailwind
 
-### Langkah Setup
+- [Node.js](https://nodejs.org/) ≥ 18.x & npm
+- Akun Google dengan akses Apps Script
+- (Opsional) Tailwind CLI untuk rebuild CSS
 
-1. Clone repositori:
-   ```bash
-   git clone <REPO_URL>
-   cd app-script-standar-version
-   ```
-
-2. Install clasp global:
-   ```bash
-   npm install -g @google/clasp
-   ```
-
-3. Login Google:
-   ```bash
-   clasp login
-   ```
-
-4. Hubungkan ke project Apps Script:
-   ```bash
-   # Jika sudah punya Script ID:
-   clasp clone <YOUR_SCRIPT_ID>
-
-   # ATAU buat project baru:
-   clasp create --type webapp --title "L-Premium POS"
-   ```
-
-5. Push ke server Google:
-   ```bash
-   clasp push
-   ```
-
-6. **Wajib:** Buat versi deployment baru agar URL `/exec` ter-update:
-   ```bash
-   clasp deploy
-   ```
-   Atau via editor: **Deploy → Manage deployments → Edit (pensil) →
-   Version: New version → Deploy**.
-
-### One-Time Post-Deployment Setup
-
-Buka editor Apps Script (`clasp open`), pilih dropdown function lalu
-klik Run untuk masing-masing:
-
-| Function | Tujuan |
-|----------|--------|
-| `setupDatabase` | Inisialisasi sheet & migrasi kolom (`shift_id`, `pelunasan_shift_id`) |
-| `setupBackupTrigger` | Aktifkan auto-backup harian pukul 02:00 |
-| `setupShiftAutoCloseTrigger` | Aktifkan auto-close shift harian pukul 23:50 |
-| `setupWarmupTrigger` _(opsional)_ | Mencegah cold start V8 engine |
-
-### Workflow Pengembangan
+### Quick Start
 
 ```bash
-# Edit file lokal
-clasp push                     # Sync ke GAS
-clasp deploy                   # Buat versi deployment baru
-# Hard-refresh browser (Ctrl+Shift+R)
+# 1. Clone repository
+git clone https://github.com/nndda-rzn/kucucikan-laundry-gas.git
+cd kucucikan-laundry-gas
+
+# 2. Install clasp global
+npm install -g @google/clasp
+
+# 3. Login ke Google
+clasp login
+
+# 4a. Hubungkan ke project Apps Script existing
+clasp clone <YOUR_SCRIPT_ID>
+
+# 4b. ATAU buat project baru
+clasp create --type webapp --title "Kucucikan Laundry POS"
+
+# 5. Push source ke server
+clasp push
+
+# 6. Buat versi deployment baru (WAJIB untuk URL /exec)
+clasp deploy
 ```
 
-> **Catatan penting:** `clasp push` saja tidak cukup untuk URL `/exec`
-> production — versi deployment baru harus dibuat agar GAS menyajikan
-> kode terbaru. URL `/dev` (test deployment) selalu pakai HEAD terbaru
-> tanpa perlu versioning.
+### Build Tailwind (Opsional)
+
+Jika ingin mengubah utility class atau menambahkan custom CSS:
+
+```bash
+npm install -D @tailwindcss/cli
+node build-tailwind.js
+clasp push
+```
 
 ---
 
-## Default Credentials (First Run)
+## Konfigurasi Pasca-Deploy
 
-Setelah `setupDatabase` pertama kali, akun default dibuat:
+Buka editor (`clasp open`) lalu jalankan fungsi berikut **satu kali**:
+
+| Function | Tujuan | Frekuensi |
+|----------|--------|-----------|
+| `setupDatabase` | Inisialisasi sheet & migrasi kolom | Sekali (idempoten) |
+| `setupBackupTrigger` | Auto-backup harian pukul 02:00 | Sekali |
+| `setupShiftAutoCloseTrigger` | Auto-close shift harian 23:50 | Sekali |
+| `setupWarmupTrigger` | _(opsional)_ Anti cold-start V8 | Sekali |
+
+> **Catatan:** Pertama kali Run akan meminta authorization Google untuk
+> akses Sheets, Drive, dan ScriptApp triggers. Klik _Review permissions_
+> → pilih akun → _Allow_.
+
+---
+
+## Workflow Pengembangan
+
+```bash
+# Edit file lokal di IDE favorit
+code .
+
+# Sync ke GAS
+clasp push
+
+# Buat versi deployment baru (untuk URL /exec)
+clasp deploy
+
+# Atau test di /dev URL (pakai HEAD terbaru tanpa versioning)
+clasp open
+# → Deploy → Test deployments → ambil URL
+```
+
+> **Penting:** `clasp push` saja **tidak** akan meng-update URL `/exec`
+> production — versi deployment baru harus dibuat agar GAS menyajikan
+> kode terbaru. Gunakan `/dev` URL untuk iterasi cepat saat development.
+
+---
+
+## Kredensial Default
+
+Setelah `setupDatabase()` pertama kali dijalankan:
 
 | Username | Password | Role |
 |----------|----------|------|
 | `admin` | `admin123` | admin |
 | `kasir` | `kasir123` | kasir |
 
-> **Wajib ganti password** setelah login pertama via menu Manajemen
-> Pegawai.
+> **Wajib ganti password** setelah login pertama melalui menu
+> **Manajemen Pegawai**.
 
 ---
 
-## Changelog Singkat
+## Roadmap
 
-### v2.1 — Shift Management _(terbaru)_
-- Fitur shift kasir lengkap: open/close/force-close/auto-close
-- Atribusi pelunasan ke shift via kolom `pelunasan_shift_id`
+- [ ] Multi-cabang (multi-spreadsheet sync)
+- [ ] Dashboard real-time via Apps Script Sheets API push
+- [ ] Loyalty point & redemption sistem
+- [ ] Integrasi payment gateway (Midtrans/Xendit) untuk QRIS dinamis
+- [ ] Mobile-first PWA dengan offline mode
+- [ ] Multi-bahasa (EN/ID)
+- [ ] Audit trail per transaksi (siapa edit kapan)
+- [ ] Time-based shift schedule (jadwal otomatis kasir)
+
+---
+
+## Changelog
+
+### v2.1 — Shift Management _(2026-05)_
+- Fitur shift kasir lengkap: open · close · force-close · auto-close
+- Atribusi pelunasan via kolom `pelunasan_shift_id` (kolom ke-23)
 - Tab Rekap Shift di halaman Laporan admin
 - Modal rekap saldo akhir saat tutup shift
+- Auto-close trigger harian 23:50 sebagai fail-safe
 - Bypass shift untuk role admin
+- LF-only line endings via `.gitattributes`
+- Defensive `setupDashboard` per-blok try/catch
 
-### v2.0 — Performance Wave
-- `getDashboardBundle` menggabungkan 4 GAS call jadi 1
+### v2.0 — Performance Wave _(2026-05)_
+- `getDashboardBundle` — 1 GAS call menggantikan 4 panggilan
 - Lazy-load ApexCharts & jsPDF
 - 3-layer caching strategy
-- Date-bounding query transactions (30 hari terakhir)
-- Optimistic UI update untuk toggle status paket
-- Batch sheet operations
+- Date-bounding query (300 transaksi terbaru)
+- Optimistic UI untuk toggle status paket
+- Batch sheet operations (setValues)
 
 ### v1.x — Foundation
 - Daily cash management (kas awal & pengeluaran)
-- User management (CRUD staff)
-- WhatsApp integration & template
+- User management dengan role-based access
+- WhatsApp integration & template kustom
 - Auto-save draft transaksi
 - LockService di semua write operations
+- Auto-backup harian ke Drive
+- UI overhaul ke Tailwind v4
+
+---
+
+## Contributing
+
+Kontribusi terbuka untuk siapa saja yang ingin meningkatkan sistem ini.
+
+```bash
+# Fork & clone
+git clone https://github.com/<your-username>/kucucikan-laundry-gas.git
+cd kucucikan-laundry-gas
+
+# Buat branch fitur
+git checkout -b feat/nama-fitur
+
+# Edit, test via clasp push, commit
+git commit -m "feat: deskripsi singkat"
+
+# Push & buka Pull Request
+git push origin feat/nama-fitur
+```
+
+### Konvensi Commit
+
+Mengikuti [Conventional Commits](https://www.conventionalcommits.org/):
+
+| Prefix | Penggunaan |
+|--------|------------|
+| `feat:` | Fitur baru |
+| `fix:` | Bug fix |
+| `perf:` | Optimasi performa |
+| `refactor:` | Refactor tanpa perubahan behavior |
+| `docs:` | Update dokumentasi |
+| `chore:` | Tooling, deps, config |
+| `style:` | Formatting, whitespace |
+
+### Code Style
+
+- LF line endings (dipaksa oleh `.gitattributes`)
+- Indentasi 2 spasi
+- Naming: `camelCase` untuk function/variable, `_suffix` untuk private
+  helpers (mis. `getActiveShift_`)
+
+---
+
+## License
+
+Proyek ini dirilis di bawah [MIT License](LICENSE).
 
 ---
 
 <div align="center">
-  <p>Dibangun untuk operasional laundry yang efisien dan akuntabel.</p>
+
+**Kucucikan Laundry POS**
+
+_Built with care for laundry operations that demand speed, accuracy, and accountability._
+
+<sub>Made with Apps Script · Deployed on Google Workspace · Zero infrastructure cost</sub>
+
+[⬆ Kembali ke atas](#kucucikan-laundry-pos)
+
 </div>
