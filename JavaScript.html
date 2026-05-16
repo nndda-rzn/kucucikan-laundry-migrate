@@ -23,6 +23,79 @@
   let pendingPelunasanId = null; // [FIX] Deklarasi eksplisit
   let currentShift = null; // Shift state
 
+  // [PERF] Lightweight client-side profiling.
+  // Setiap RPC GAS yang di-wrap dengan trackedRun(name, runner) akan
+  // mencatat durasi ke _perfLog. Lihat hasil di console:
+  //   window.perfStats()   // ringkasan p50/p95 per fungsi
+  //   window.perfClear()   // reset log
+  // Bisa di-disable: window.PERF_OFF = true;
+  const _perfLog = [];
+  const _PERF_LIMIT = 500;
+
+  function _perfRecord(name, ms, ok) {
+    if (window.PERF_OFF) return;
+    _perfLog.push({ name, ms, ok, t: Date.now() });
+    if (_perfLog.length > _PERF_LIMIT) _perfLog.splice(0, _perfLog.length - _PERF_LIMIT);
+  }
+
+  // Wrapper untuk google.script.run handler — pakai untuk hot paths.
+  // Contoh:
+  //   trackedRun("getDashboardBundle", run => run.getDashboardBundle(token))
+  //     .withSuccessHandler(...).withFailureHandler(...);
+  function trackedRun(name, runner) {
+    const t0 = (window.performance && performance.now) ? performance.now() : Date.now();
+    const r = google.script.run;
+    let userSuccess = null;
+    let userFailure = null;
+
+    const wrapped = {
+      withSuccessHandler(fn) { userSuccess = fn; return wrapped; },
+      withFailureHandler(fn) { userFailure = fn; return wrapped; },
+    };
+
+    // Jalankan runner setelah handler di-wire — runner harus return chain GAS
+    setTimeout(() => {
+      const chain = runner(r);
+      chain.withSuccessHandler(function (res) {
+        const dur = ((window.performance && performance.now) ? performance.now() : Date.now()) - t0;
+        _perfRecord(name, Math.round(dur), true);
+        if (!window.PERF_OFF) console.log("[PERF][" + name + "] " + Math.round(dur) + "ms");
+        if (userSuccess) userSuccess(res);
+      }).withFailureHandler(function (err) {
+        const dur = ((window.performance && performance.now) ? performance.now() : Date.now()) - t0;
+        _perfRecord(name, Math.round(dur), false);
+        if (!window.PERF_OFF) console.warn("[PERF][" + name + "] " + Math.round(dur) + "ms (FAIL)");
+        if (userFailure) userFailure(err);
+      });
+    }, 0);
+
+    return wrapped;
+  }
+
+  window.perfStats = function () {
+    if (_perfLog.length === 0) { console.log("Belum ada data perf."); return; }
+    const grouped = {};
+    for (const e of _perfLog) {
+      if (!grouped[e.name]) grouped[e.name] = [];
+      grouped[e.name].push(e.ms);
+    }
+    const stats = [];
+    Object.keys(grouped).forEach(k => {
+      const arr = grouped[k].slice().sort((a, b) => a - b);
+      const p50 = arr[Math.floor(arr.length * 0.5)] || 0;
+      const p95 = arr[Math.floor(arr.length * 0.95)] || 0;
+      const max = arr[arr.length - 1] || 0;
+      const avg = Math.round(arr.reduce((s, x) => s + x, 0) / arr.length);
+      stats.push({ fn: k, calls: arr.length, p50, p95, max, avg });
+    });
+    stats.sort((a, b) => b.p95 - a.p95);
+    console.table(stats);
+    return stats;
+  };
+
+  window.perfClear = function () { _perfLog.length = 0; console.log("Perf log cleared."); };
+
+
   // [OPT] Lazy-load ApexCharts + jsPDF — hanya dimuat saat tab Laporan pertama kali dibuka
   // Menghemat ~400KB di initial page load, UI menjadi interaktif jauh lebih cepat
   let _lazyScriptsLoaded = false;

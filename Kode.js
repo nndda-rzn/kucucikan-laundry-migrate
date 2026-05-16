@@ -152,6 +152,61 @@ function logError(funcName, message, context) {
   }
 }
 
+// [PERF] Profiling helper — log durasi eksekusi fungsi server ke
+// Stackdriver/console + sample ke sheet `perf_logs` (1 dari 5 call).
+// Pakai dengan pattern: return _perf("fnName", () => { ...body... });
+// Disable global via PropertiesService key PERF_DISABLED = "1".
+let _perfDisabled = null;
+function _isPerfDisabled() {
+  if (_perfDisabled === null) {
+    try {
+      _perfDisabled = PropertiesService.getScriptProperties().getProperty("PERF_DISABLED") === "1";
+    } catch (e) { _perfDisabled = false; }
+  }
+  return _perfDisabled;
+}
+
+function _perf(name, fn) {
+  if (_isPerfDisabled()) return fn();
+  const t0 = Date.now();
+  try {
+    const result = fn();
+    const dur = Date.now() - t0;
+    console.log("[PERF][" + name + "] " + dur + "ms");
+    // Sample 1/5 ke sheet untuk tidak membebani I/O
+    if (Math.random() < 0.2) {
+      try {
+        const ss = getSS();
+        let s = ss.getSheetByName("perf_logs");
+        if (!s) {
+          s = ss.insertSheet("perf_logs");
+          s.appendRow(["timestamp", "fn", "ms", "ok"]);
+          s.setFrozenRows(1);
+        }
+        s.appendRow([new Date(), name, dur, true]);
+        const lastRow = s.getLastRow();
+        if (lastRow > 1000) s.deleteRows(2, lastRow - 1000);
+      } catch (e) { /* silent */ }
+    }
+    return result;
+  } catch (e) {
+    const dur = Date.now() - t0;
+    console.log("[PERF][" + name + "] " + dur + "ms (FAIL: " + e.message + ")");
+    throw e;
+  }
+}
+
+function disablePerfLogging() {
+  PropertiesService.getScriptProperties().setProperty("PERF_DISABLED", "1");
+  _perfDisabled = true;
+  return "Perf logging dinonaktifkan.";
+}
+function enablePerfLogging() {
+  PropertiesService.getScriptProperties().deleteProperty("PERF_DISABLED");
+  _perfDisabled = false;
+  return "Perf logging diaktifkan.";
+}
+
 // [P2] Auto backup harian — panggil setupBackupTrigger() sekali untuk mengaktifkan
 function setupBackupTrigger() {
   const triggers = ScriptApp.getProjectTriggers();
@@ -1466,26 +1521,27 @@ function getReportAndKasData(token, startDateStr, endDateStr) {
 // (getTransactions + getSettings + getPackages → 1 getDashboardBundle)
 // Menghemat 2 round-trip GAS (~2-10 detik) setiap kali pengguna login atau reload.
 function getDashboardBundle(token) {
-  const session = validateSession_(token);
-  try {
-    const transactions = getTransactions(token);
-    const packages = getPackages(token);
-    const settings = getSettings();
-    // [OPT] Sertakan customers dalam bundle — menggantikan fetchCustomers() terpisah saat startup
-    const customers = getCustomers(token);
-    const activeShift = getActiveShift_(session.username);
-    return {
-      success: true,
-      transactions: transactions,
-      packages: packages,
-      settings: settings,
-      customers: customers,
-      activeShift: activeShift
-    };
-  } catch (e) {
-    logError("getDashboardBundle", e.message);
-    return { success: false, message: "Gagal mengambil data dashboard: " + e.message };
-  }
+  return _perf("getDashboardBundle", function () {
+    const session = validateSession_(token);
+    try {
+      const transactions = _perf("  └ getTransactions", () => getTransactions(token));
+      const packages = _perf("  └ getPackages", () => getPackages(token));
+      const settings = _perf("  └ getSettings", () => getSettings());
+      const customers = _perf("  └ getCustomers", () => getCustomers(token));
+      const activeShift = _perf("  └ getActiveShift_", () => getActiveShift_(session.username));
+      return {
+        success: true,
+        transactions: transactions,
+        packages: packages,
+        settings: settings,
+        customers: customers,
+        activeShift: activeShift,
+      };
+    } catch (e) {
+      logError("getDashboardBundle", e.message);
+      return { success: false, message: "Gagal mengambil data dashboard: " + e.message };
+    }
+  });
 }
 
 // ==========================================
@@ -1901,6 +1957,54 @@ function setupShiftAutoCloseTrigger() {
     .everyDays(1)
     .create();
   return "Trigger autoCloseExpiredShifts terpasang (jalan tiap hari ~23:50).";
+}
+
+// [PERF] Benchmark hot paths server. Admin-only.
+// Pakai untuk diagnose lambatnya request (cold start, sheet I/O, dll).
+// Hasil ditampilkan di console & dikembalikan sebagai object durasi.
+function runPerfBenchmark(token) {
+  validateAdminSession_(token);
+  const results = {};
+  const time = (name, fn) => {
+    const t0 = Date.now();
+    try {
+      const r = fn();
+      results[name] = { ms: Date.now() - t0, ok: true, size: r ? JSON.stringify(r).length : 0 };
+    } catch (e) {
+      results[name] = { ms: Date.now() - t0, ok: false, error: e.message };
+    }
+  };
+
+  time("warmup_ping", () => CacheService.getScriptCache().get("warmup_ping"));
+  time("getSS", () => getSS());
+  time("getSettings", () => getSettings());
+  time("getPackages", () => getPackages(token));
+  time("getCustomers", () => getCustomers(token));
+  time("getTransactions", () => getTransactions(token));
+  time("getDashboardBundle", () => getDashboardBundle(token));
+  time("getKasHarian_today", () => getKasHarian(token, new Date().toISOString()));
+  // Sampling shift summary (skip jika tidak ada shifts)
+  try {
+    const shiftSheet = getSheet("shifts");
+    const lr = shiftSheet.getLastRow();
+    if (lr > 1) {
+      const sample = shiftSheet.getRange(lr, 1, 1, 6).getValues()[0];
+      time("computeShiftSummary_", () => computeShiftSummary_(sample[0], sample[5]));
+    }
+  } catch (e) { /* skip */ }
+
+  // One-time setup helper untuk semua trigger (warmup + auto-close + backup)
+  return { success: true, results };
+}
+
+// [PERF] Convenience: pasang semua trigger sekaligus.
+// Cek + buat ulang warmup, autoCloseShift, dan backup harian.
+function setupAllTriggers() {
+  const out = [];
+  out.push(setupWarmupTrigger());
+  out.push(setupShiftAutoCloseTrigger());
+  try { out.push(setupBackupTrigger()); } catch (e) { out.push("setupBackupTrigger: " + e.message); }
+  return out.join("\n");
 }
 
 // ==========================================
