@@ -19,7 +19,7 @@ _Sistem kasir profesional dengan shift management, profiling instrumentation, da
 <br />
 
 [![Status](https://img.shields.io/badge/status-production_ready-success?style=flat-square)](#)
-[![Version](https://img.shields.io/badge/version-2.2-blue?style=flat-square)](#-changelog)
+[![Version](https://img.shields.io/badge/version-2.3-blue?style=flat-square)](#-changelog)
 [![Runtime](https://img.shields.io/badge/runtime-V8-orange?style=flat-square)](#)
 [![Timezone](https://img.shields.io/badge/timezone-Asia%2FJakarta-violet?style=flat-square)](#)
 [![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)](#-license)
@@ -105,16 +105,22 @@ tanpa biaya berlangganan bulanan, namun tetap menuntut akuntabilitas
 <td width="50%" valign="top">
 
 ### Shift Management
-- Buka shift dengan modal awal kas
-- Tutup shift dengan rekap saldo akhir otomatis
+- Buka shift dengan modal awal kas (otomatis tersinkron ke Manajemen Kas)
+- Tutup shift dengan rekap saldo akhir + **breakdown rinci**
+  per metode (Tunai/QRIS/Transfer × DP/Pelunasan) dan per kategori
+  pengeluaran (Bahan Baku/Operasional/Lain-lain)
 - Atribusi pelunasan akurat antar shift
   (kolom `pelunasan_shift_id`)
+- **Section "Manajemen Shift" admin-only** dengan tab Shift Aktif
+  (live monitoring) & Riwayat Shift, plus stat cards real-time
 - **Force-close** oleh admin untuk shift terbengkalai
 - **Auto-close** trigger harian pukul 23:50
-- Persisted summary (total pengeluaran + saldo akhir)
-  agar admin rekap tanpa recompute
-- Tab Rekap Shift dengan live preview shift aktif
-- Bypass otomatis untuk role admin
+- Persisted summary + breakdown JSON (kolom 15) — admin bisa
+  buka detail historis shift lama tanpa recompute
+- Tombol "Hitung Detail" untuk lazy-migrasi shift pre-v2.3
+- 15-detik cache pada `getAllActiveShifts` dengan auto-invalidate
+  saat open/close/force-close
+- Bypass otomatis untuk role admin di flow transaksi
 
 ### Dasbor Analitik
 - Real-time omzet, antrean, target hari ini
@@ -122,7 +128,8 @@ tanpa biaya berlangganan bulanan, namun tetap menuntut akuntabilitas
 - Pause polling saat tab background → resume on focus
 - Tren pendapatan + chart layanan terlaris
 - Export laporan CSV / PDF (lazy-loaded)
-- Manajemen kas harian
+- Manajemen kas: form Catat Pengeluaran (kasir & admin) +
+  banner edukatif "Uang Awal Otomatis" dari shift aktif
 - Estimasi saldo real-time
 
 ### Administrasi
@@ -180,7 +187,7 @@ flowchart TB
 
     subgraph DB["Google Sheets"]
         T1[(transactions<br/>23 cols)]
-        T2[(shifts<br/>14 cols)]
+        T2[(shifts<br/>15 cols + breakdown_json)]
         T3[(packages, customers,<br/>users, settings,<br/>kas_awal, pengeluaran)]
         Logs[(error_logs<br/>perf_logs)]
     end
@@ -240,13 +247,49 @@ sequenceDiagram
 ```mermaid
 stateDiagram-v2
     [*] --> NoShift: Kasir login
-    NoShift --> Aktif: openShift(modalAwal)
+    NoShift --> Aktif: openShift(modalAwal)\nstamp ke shifts + kas_awal
     Aktif --> Aktif: createTransaction\nlunasDanAmbil\n(stamp shift_id\n& pelunasan_shift_id)
     Aktif --> Selesai: closeShift(catatan)
     Aktif --> ForceClosed: forceCloseShift\n(admin)
     Aktif --> ForceClosed: autoCloseExpiredShifts\n(daily 23:50 trigger)
-    Selesai --> [*]: persist summary\n+ saldo_akhir
-    ForceClosed --> [*]: persist summary\n+ saldo_akhir
+    Selesai --> [*]: persist summary\n+ saldo_akhir\n+ breakdown_json
+    ForceClosed --> [*]: persist summary\n+ saldo_akhir\n+ breakdown_json
+```
+
+### Admin Shift Management Flow (v2.3)
+
+```mermaid
+sequenceDiagram
+    actor Admin
+    participant UI as Manajemen Shift
+    participant GAS as Apps Script
+    participant Cache as CacheService<br/>(15s)
+    participant Sheet as shifts sheet
+
+    Admin->>UI: Open section "Manajemen Shift"
+    UI->>GAS: getAllActiveShifts(token)
+    GAS->>Cache: get("active_shifts_v2")
+    alt cache hit
+        Cache-->>GAS: cached payload
+    else cache miss
+        GAS->>Sheet: read 200 latest rows
+        GAS->>GAS: computeShiftSummary_<br/>(per Aktif shift)
+        GAS->>Cache: put 15s
+    end
+    GAS-->>UI: { active shifts + live_summary }
+    UI->>UI: Render cards + stat counters
+
+    Admin->>UI: Click "Force Close"
+    UI->>GAS: forceCloseShift(shiftId, catatan)
+    GAS->>Sheet: persist summary + breakdown_json
+    GAS->>Cache: invalidate
+    GAS-->>UI: { success, summary }
+
+    Admin->>UI: Switch tab "Riwayat Shift"
+    UI->>GAS: getShiftHistory(token, 30days)
+    GAS->>Sheet: read up to 500 latest rows
+    GAS->>GAS: parse breakdown_json<br/>untuk shift sudah ditutup
+    GAS-->>UI: { shifts + breakdown restored }
 ```
 
 ---
@@ -269,8 +312,14 @@ stateDiagram-v2
 - **Batch sheet writes** — `setValues([rows])` menggantikan multiple
   `setValue()`, percepat tulis 400–600%
 - **Persisted shift summary** — sheet `shifts` menyimpan
-  `total_pengeluaran` & `saldo_akhir` saat close, jadi `getShiftHistory`
-  tidak recompute untuk shift yang sudah ditutup
+  `total_pengeluaran`, `saldo_akhir`, dan **`breakdown_json`** (kolom 15)
+  saat close, jadi `getShiftHistory` tidak recompute untuk shift
+  yang sudah ditutup
+- **Active shifts cache 15s** — `getAllActiveShifts` hasil di-cache
+  CacheService 15 detik dengan auto-invalidate hooks pada
+  open/close/forceClose; aman untuk monitoring polling agresif
+- **Lazy migration** — endpoint `recomputeShiftBreakdown` admin-only
+  untuk menghitung & persist breakdown shift lama on-demand
 - **Lazy-load** ApexCharts (~250KB) + jsPDF (~150KB) hanya saat tab
   Laporan pertama dibuka, hemat ~400KB pada initial load
 - **4-layer caching:**
@@ -321,7 +370,8 @@ Executions) dan sample 1 dari 5 call ke sheet `perf_logs` untuk audit.
 - **Login rate limit** — 5 percobaan gagal mengunci 15 menit
 - **Admin-only guards** via `validateAdminSession_()` di endpoint
   sensitif (`deleteTransaction`, `forceCloseShift`, `getShiftHistory`,
-  `getUsersList`, `runPerfBenchmark`)
+  `getAllActiveShifts`, `recomputeShiftBreakdown`, `getUsersList`,
+  `runPerfBenchmark`)
 - **DB_ID** di Script Properties (bukan hardcoded) dengan auto-migrasi
 - **Server-side trust** — total, diskon, status divalidasi ulang di
   server, mencegah manipulasi DevTools
@@ -401,7 +451,7 @@ expand detail kolom.
 </details>
 
 <details>
-<summary><b>Sheet: <code>shifts</code> (14 kolom)</b></summary>
+<summary><b>Sheet: <code>shifts</code> (15 kolom)</b></summary>
 
 | # | Kolom | Tipe | Keterangan |
 |---|-------|------|------------|
@@ -417,8 +467,28 @@ expand detail kolom.
 | 10 | jumlah_order | int | Hitung order (persisted) |
 | 11 | status | enum | `Aktif`/`Selesai`/`Force-Closed` |
 | 12 | catatan | string | Catatan tutup shift |
-| 13 | **total_pengeluaran** | int | Pengeluaran shift (persisted) |
-| 14 | **saldo_akhir** | int | modal + tunai − pengeluaran |
+| 13 | total_pengeluaran | int | Pengeluaran shift (persisted) |
+| 14 | saldo_akhir | int | modal + tunai − pengeluaran |
+| 15 | **breakdown_json** | JSON | Breakdown rinci per metode (Tunai/QRIS/Transfer × DP/Pelunasan) & per kategori pengeluaran (persisted v2.3+) |
+
+Format `breakdown_json`:
+```json
+{
+  "breakdownMetode": {
+    "Tunai":    { "dp": 50000, "pelunasan": 30000, "total": 80000, "count": 3 },
+    "QRIS":     { "dp": 0,     "pelunasan": 0,     "total": 0,     "count": 0 },
+    "Transfer": { "dp": 0,     "pelunasan": 0,     "total": 0,     "count": 0 },
+    "Lainnya":  { "dp": 0,     "pelunasan": 0,     "total": 0,     "count": 0 }
+  },
+  "breakdownPengeluaran": {
+    "Bahan Baku":  { "jumlah": 12000, "count": 1 },
+    "Operasional": { "jumlah": 0,     "count": 0 },
+    "Lain-lain":   { "jumlah": 0,     "count": 0 }
+  },
+  "totalDp": 50000,
+  "totalPelunasan": 30000
+}
+```
 
 </details>
 
@@ -575,10 +645,32 @@ Setelah `setupDatabase()` pertama kali dijalankan:
 - [ ] Audit trail per transaksi (siapa edit kapan)
 - [ ] Pre-aggregated daily stats sheet untuk dashboard instant
 - [ ] Service worker caching untuk static asset
+- [ ] Bulk migration command untuk semua shift legacy ke breakdown_json
+- [ ] Export PDF/Excel rekap shift per kasir & per periode
 
 ---
 
 ## Changelog
+
+### v2.3 — Admin Shift Management & Detailed Bookkeeping _(2026-05)_
+- Section baru **"Manajemen Shift"** admin-only dengan tab Shift Aktif
+  (live monitoring) & Riwayat Shift, plus 3 stat cards real-time
+- Hapus form duplikat **"Input Uang Awal"** di Manajemen Kas;
+  modal awal otomatis tersinkron dari `openShift()`
+- Backend `getAllActiveShifts()` dengan cache 15 detik dan
+  auto-invalidate hooks (open/close/forceClose/autoClose)
+- `computeShiftSummary_` mengembalikan **breakdownMetode**
+  (Tunai/QRIS/Transfer × DP/Pelunasan) dan
+  **breakdownPengeluaran** per kategori
+- Persist `breakdown_json` (kolom 15) saat close/forceClose/autoClose
+  — admin bisa lihat detail historis tanpa recompute
+- `getShiftHistory` restore breakdown dari JSON; range-bounded ke
+  500 row terakhir
+- Endpoint `recomputeShiftBreakdown` admin-only untuk lazy migration
+  shift pre-v2.3 (tombol "Hitung Detail" di card Riwayat)
+- Modal **Shift Selesai** kini menampilkan rincian per metode + per
+  kategori pengeluaran + saldo akhir highlight
+- Admin cards expand/collapse "Detail" dengan breakdown lengkap
 
 ### v2.2 — Performance & Profiling _(2026-05)_
 - Profiling instrumentation (`_perf` wrapper, `runPerfBenchmark`,
