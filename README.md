@@ -19,7 +19,7 @@ _Sistem kasir profesional dengan shift management, profiling instrumentation, da
 <br />
 
 [![Status](https://img.shields.io/badge/status-production_ready-success?style=flat-square)](#)
-[![Version](https://img.shields.io/badge/version-2.3-blue?style=flat-square)](#-changelog)
+[![Version](https://img.shields.io/badge/version-2.4-blue?style=flat-square)](#-changelog)
 [![Runtime](https://img.shields.io/badge/runtime-V8-orange?style=flat-square)](#)
 [![Timezone](https://img.shields.io/badge/timezone-Asia%2FJakarta-violet?style=flat-square)](#)
 [![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)](#-license)
@@ -128,8 +128,12 @@ tanpa biaya berlangganan bulanan, namun tetap menuntut akuntabilitas
 - Pause polling saat tab background → resume on focus
 - Tren pendapatan + chart layanan terlaris
 - Export laporan CSV / PDF (lazy-loaded)
-- Manajemen kas: form Catat Pengeluaran (kasir & admin) +
-  banner edukatif "Uang Awal Otomatis" dari shift aktif
+- **Manajemen Kas role-aware scope:**
+  - Kasir + shift aktif → "Pengeluaran Shift Ini" (window waktu shift)
+  - Kasir tanpa shift → form disabled + banner peringatan
+  - Admin → "Pengeluaran Hari Ini" (lintas shift)
+  - Tanggal lalu → read-only riwayat
+- Banner edukatif "Uang Awal Otomatis" dari shift aktif
 - Estimasi saldo real-time
 
 ### Administrasi
@@ -290,6 +294,29 @@ sequenceDiagram
     GAS->>Sheet: read up to 500 latest rows
     GAS->>GAS: parse breakdown_json<br/>untuk shift sudah ditutup
     GAS-->>UI: { shifts + breakdown restored }
+```
+
+### Manajemen Kas Scope Resolution (v2.4)
+
+```mermaid
+flowchart TD
+    Start([fetchKasHarian]) --> A{role?}
+    A -->|admin| D[scope = 'date'<br/>tampilkan semua pengeluaran<br/>tanggal terpilih]
+    A -->|kasir| B{filter = hari ini?}
+    B -->|tidak| D2[scope = 'date'<br/>read-only riwayat]
+    B -->|ya| C{shift aktif?}
+    C -->|ya| E[scope = 'shift'<br/>window waktu shift<br/>form aktif]
+    C -->|tidak| F[scope = 'none'<br/>banner peringatan<br/>form disabled]
+
+    D --> Out[Return:<br/>uang_awal, pengeluaran,<br/>scope, requires_shift]
+    D2 --> Out
+    E --> Out
+    F --> Out
+
+    style E fill:#dcfce7,stroke:#16a34a
+    style F fill:#fef3c7,stroke:#f59e0b
+    style D fill:#dbeafe,stroke:#2563eb
+    style D2 fill:#dbeafe,stroke:#2563eb
 ```
 
 ---
@@ -651,6 +678,24 @@ Setelah `setupDatabase()` pertama kali dijalankan:
 ---
 
 ## Changelog
+
+### v2.4 — Role-Aware Cash Management _(2026-05)_
+- `getKasHarian` mengembalikan **scope** per request:
+  - `shift` — kasir hari ini dengan shift aktif → window waktu shift
+    (mulai → now); konsisten dengan rekap closeShift
+  - `date` — admin atau kasir lihat tanggal lalu → semua pengeluaran
+    pada tanggal itu (lintas shift kasir)
+  - `none` — kasir hari ini tanpa shift aktif → kosong + flag
+    `requires_shift` untuk UI banner
+- Frontend `applyKasScope`:
+  - Label dinamis "Pengeluaran Shift Ini" / "Pengeluaran Hari Ini" /
+    "Pengeluaran Hari Ini (Riwayat)"
+  - Banner peringatan + form disabled saat scope `none`
+  - Read-only mode kasir saat lihat tanggal lalu
+- Auto-refresh section Manajemen Kas saat `openShift` / `closeShift` —
+  scope visual reset ke 0 tanpa kehilangan data DB
+- Single source of truth (sheet `pengeluaran` tetap append-only),
+  yang berubah hanya **query scope** sesuai konteks user
 
 ### v2.3 — Admin Shift Management & Detailed Bookkeeping _(2026-05)_
 - Section baru **"Manajemen Shift"** admin-only dengan tab Shift Aktif
