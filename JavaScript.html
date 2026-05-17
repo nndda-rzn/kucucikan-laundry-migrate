@@ -329,6 +329,54 @@
     }
   }
 
+  // [P1-3] Helper standar untuk inline button loading state.
+  // Pakai untuk semua RPC button (submit transaksi, simpan paket, force close, dll).
+  // Mempertahankan ukuran tombol & menambah spinner kecil di kiri label.
+  //   setBtnLoading(btn, true, "Memproses...")  → disabled + spinner + label baru
+  //   setBtnLoading(btn, false)                  → restore innerHTML asli + enabled
+  function setBtnLoading(btn, loading, label) {
+    if (!btn) return;
+    if (loading) {
+      if (!btn.dataset._origHtml) {
+        btn.dataset._origHtml = btn.innerHTML;
+      }
+      btn.disabled = true;
+      btn.setAttribute("aria-busy", "true");
+      const spinner = '<svg class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24" aria-hidden="true"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path></svg>';
+      btn.innerHTML = spinner + '<span>' + (label || "Memproses...") + '</span>';
+    } else {
+      btn.disabled = false;
+      btn.removeAttribute("aria-busy");
+      if (btn.dataset._origHtml) {
+        btn.innerHTML = btn.dataset._origHtml;
+        delete btn.dataset._origHtml;
+      }
+    }
+  }
+
+  // [P1-3] Skeleton card generator untuk list views.
+  // Pakai untuk transactions/customers/shifts/paket loading state.
+  //   renderListSkeleton("listId", 3)  → 3 skeleton row di container
+  function renderListSkeleton(targetIdOrEl, count) {
+    const target = typeof targetIdOrEl === "string"
+      ? document.getElementById(targetIdOrEl)
+      : targetIdOrEl;
+    if (!target) return;
+    const n = parseInt(count) || 3;
+    const rows = [];
+    for (let i = 0; i < n; i++) {
+      rows.push(`<div class="bg-slate-50 p-4 rounded-2xl animate-pulse flex items-center gap-4" aria-hidden="true">
+        <div class="w-12 h-12 rounded-full bg-slate-200 flex-shrink-0"></div>
+        <div class="flex-1 space-y-2">
+          <div class="h-4 bg-slate-200 rounded-lg w-1/3"></div>
+          <div class="h-3 bg-slate-100 rounded-lg w-2/3"></div>
+        </div>
+      </div>`);
+    }
+    target.setAttribute("aria-busy", "true");
+    target.innerHTML = `<div class="space-y-3">${rows.join("")}</div>`;
+  }
+
   function showToast(message, type = "success") {
     const container = document.getElementById("toastContainer");
     const toast = document.createElement("div");
@@ -4702,14 +4750,11 @@ Terima kasih.`;
   function executeOpenShift() {
     const modalAwal = document.getElementById("shiftModalAwal").value;
     const btn = document.getElementById("btnSubmitOpenShift");
-    const origText = btn.innerHTML;
-    btn.innerHTML = "Membuka...";
-    btn.disabled = true;
-    
+    setBtnLoading(btn, true, "Membuka...");
+
     google.script.run
       .withSuccessHandler(function(res) {
-        btn.innerHTML = origText;
-        btn.disabled = false;
+        setBtnLoading(btn, false);
         if (res && res.success) {
           showToast(res.message);
           closeOpenShiftModal();
@@ -4725,8 +4770,7 @@ Terima kasih.`;
         }
       })
       .withFailureHandler(function(err) {
-        btn.innerHTML = origText;
-        btn.disabled = false;
+        setBtnLoading(btn, false);
         showToast("Error: " + err.message, "error");
       })
       .openShift(currentUser.token, modalAwal);
@@ -4754,14 +4798,11 @@ Terima kasih.`;
     if (!currentShift) return;
     const catatan = document.getElementById("shiftCatatan").value;
     const btn = document.getElementById("btnSubmitCloseShift");
-    const origText = btn.innerHTML;
-    btn.innerHTML = "Menutup...";
-    btn.disabled = true;
-    
+    setBtnLoading(btn, true, "Menutup...");
+
     google.script.run
       .withSuccessHandler(function(res) {
-        btn.innerHTML = origText;
-        btn.disabled = false;
+        setBtnLoading(btn, false);
         if (res && res.success) {
           showToast(res.message);
           closeCloseShiftModal();
@@ -4784,8 +4825,7 @@ Terima kasih.`;
         }
       })
       .withFailureHandler(function(err) {
-        btn.innerHTML = origText;
-        btn.disabled = false;
+        setBtnLoading(btn, false);
         showToast("Error: " + err.message, "error");
       })
       .closeShift(currentUser.token, currentShift.id, catatan);
@@ -4952,19 +4992,14 @@ Terima kasih.`;
       }
     }
 
+    // [P1-1] Toggle visibility toolbar search + filter — hanya di tab Riwayat
+    const toolbar = document.getElementById("shiftRiwayatToolbar");
+    if (toolbar) toolbar.classList.toggle("hidden", _shiftAdminActiveTab !== "riwayat");
+
     const body = document.getElementById("shiftAdminBody");
     if (body) {
-      body.innerHTML = `<div class="space-y-3">${[1, 2, 3]
-        .map(
-          () => `<div class="bg-slate-50 p-4 rounded-2xl animate-pulse flex items-center gap-4">
-            <div class="w-12 h-12 rounded-full bg-slate-200 flex-shrink-0"></div>
-            <div class="flex-1 space-y-2">
-              <div class="h-4 bg-slate-200 rounded-lg w-1/3"></div>
-              <div class="h-3 bg-slate-100 rounded-lg w-2/3"></div>
-            </div>
-          </div>`,
-        )
-        .join("")}</div>`;
+      // [P1-3] Pakai skeleton helper terpadu
+      renderListSkeleton(body, 3);
     }
 
     if (_shiftAdminActiveTab === "aktif") {
@@ -5122,60 +5157,82 @@ Terima kasih.`;
           </div>
         </div>
         <div id="${detailId}" class="hidden mt-3 pl-2 pt-3 border-t border-dashed border-slate-200 space-y-3">
+          <!-- [P1-2] Layer 1 — Ringkasan: total per metode + total pengeluaran -->
           <div>
             <p class="text-[10px] font-black text-slate-700 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
               <span class="w-1 h-3 bg-blue-500 rounded-full"></span>Pemasukan per Metode
             </p>
-            <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
-              <div class="bg-emerald-50/50 rounded-lg p-2 border border-emerald-100">
-                <div class="flex justify-between items-baseline">
-                  <span class="text-[10px] font-bold text-emerald-600">Tunai</span>
-                  <span class="text-xs font-black text-emerald-700">${fmtRp(tunai.total)}</span>
-                </div>
-                <div class="text-[9px] text-slate-500 mt-1 space-y-0.5">
-                  <div class="flex justify-between"><span>DP</span><span class="font-bold">${fmtRp(tunai.dp)}</span></div>
-                  <div class="flex justify-between"><span>Pelunasan</span><span class="font-bold">${fmtRp(tunai.pelunasan)}</span></div>
-                </div>
+            <div class="grid grid-cols-3 gap-2">
+              <div class="bg-emerald-50/50 rounded-lg p-2 border border-emerald-100 text-center">
+                <p class="text-[10px] font-bold text-emerald-600">Tunai</p>
+                <p class="text-xs font-black text-emerald-700 mt-0.5">${fmtRp(tunai.total)}</p>
               </div>
-              <div class="bg-blue-50/50 rounded-lg p-2 border border-blue-100">
-                <div class="flex justify-between items-baseline">
-                  <span class="text-[10px] font-bold text-blue-600">QRIS</span>
-                  <span class="text-xs font-black text-blue-700">${fmtRp(qris.total)}</span>
-                </div>
-                <div class="text-[9px] text-slate-500 mt-1 space-y-0.5">
-                  <div class="flex justify-between"><span>DP</span><span class="font-bold">${fmtRp(qris.dp)}</span></div>
-                  <div class="flex justify-between"><span>Pelunasan</span><span class="font-bold">${fmtRp(qris.pelunasan)}</span></div>
-                </div>
+              <div class="bg-blue-50/50 rounded-lg p-2 border border-blue-100 text-center">
+                <p class="text-[10px] font-bold text-blue-600">QRIS</p>
+                <p class="text-xs font-black text-blue-700 mt-0.5">${fmtRp(qris.total)}</p>
               </div>
-              <div class="bg-violet-50/50 rounded-lg p-2 border border-violet-100">
-                <div class="flex justify-between items-baseline">
-                  <span class="text-[10px] font-bold text-violet-600">Transfer</span>
-                  <span class="text-xs font-black text-violet-700">${fmtRp(transfer.total)}</span>
-                </div>
-                <div class="text-[9px] text-slate-500 mt-1 space-y-0.5">
-                  <div class="flex justify-between"><span>DP</span><span class="font-bold">${fmtRp(transfer.dp)}</span></div>
-                  <div class="flex justify-between"><span>Pelunasan</span><span class="font-bold">${fmtRp(transfer.pelunasan)}</span></div>
-                </div>
+              <div class="bg-violet-50/50 rounded-lg p-2 border border-violet-100 text-center">
+                <p class="text-[10px] font-bold text-violet-600">Transfer</p>
+                <p class="text-xs font-black text-violet-700 mt-0.5">${fmtRp(transfer.total)}</p>
               </div>
             </div>
           </div>
           ${(sm.totalPengeluaran || 0) > 0 ? `
-          <div>
-            <p class="text-[10px] font-black text-slate-700 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
-              <span class="w-1 h-3 bg-red-500 rounded-full"></span>Pengeluaran per Kategori
-            </p>
-            <div class="bg-red-50/40 rounded-lg p-2 border border-red-100">
-              ${pengKategoriHtml || `<p class="text-[10px] text-slate-500 italic">Belum ada pengeluaran.</p>`}
-              <div class="flex justify-between items-center pt-1.5 mt-1.5 border-t border-dashed border-red-200">
-                <span class="text-[10px] font-bold text-red-600 uppercase">Total</span>
-                <span class="text-xs font-black text-red-700">${fmtRp(sm.totalPengeluaran || 0)}</span>
+          <div class="bg-red-50/40 rounded-lg p-2 border border-red-100 flex justify-between items-center">
+            <span class="text-[10px] font-bold text-red-600 uppercase tracking-wider flex items-center gap-1.5">
+              <span class="w-1 h-3 bg-red-500 rounded-full"></span>Total Pengeluaran
+            </span>
+            <span class="text-xs font-black text-red-700">${fmtRp(sm.totalPengeluaran || 0)}</span>
+          </div>` : ""}
+
+          <!-- [P1-2] Tombol untuk reveal Layer 2 — DP/Pelunasan + kategori -->
+          <button onclick="toggleShiftDetail('${detailId}__full', this)"
+                  class="w-full text-[10px] font-bold text-slate-600 hover:text-blue-600 hover:bg-slate-50 px-3 py-2 rounded-lg border border-dashed border-slate-300 hover:border-blue-200 transition-colors flex items-center justify-center gap-1.5">
+            <span>Lihat Rincian Penuh</span>
+            <svg class="w-3 h-3 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"></path></svg>
+          </button>
+
+          <!-- [P1-2] Layer 2 — Rincian Penuh: DP/Pelunasan per metode + breakdown kategori pengeluaran -->
+          <div id="${detailId}__full" class="hidden space-y-3">
+            <div>
+              <p class="text-[10px] font-black text-slate-700 uppercase tracking-wider mb-1.5">Rincian DP & Pelunasan</p>
+              <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <div class="bg-emerald-50/30 rounded-lg p-2 border border-emerald-100">
+                  <p class="text-[10px] font-bold text-emerald-600 mb-1">Tunai</p>
+                  <div class="text-[10px] text-slate-600 space-y-0.5">
+                    <div class="flex justify-between"><span>DP</span><span class="font-bold">${fmtRp(tunai.dp)}</span></div>
+                    <div class="flex justify-between"><span>Pelunasan</span><span class="font-bold">${fmtRp(tunai.pelunasan)}</span></div>
+                  </div>
+                </div>
+                <div class="bg-blue-50/30 rounded-lg p-2 border border-blue-100">
+                  <p class="text-[10px] font-bold text-blue-600 mb-1">QRIS</p>
+                  <div class="text-[10px] text-slate-600 space-y-0.5">
+                    <div class="flex justify-between"><span>DP</span><span class="font-bold">${fmtRp(qris.dp)}</span></div>
+                    <div class="flex justify-between"><span>Pelunasan</span><span class="font-bold">${fmtRp(qris.pelunasan)}</span></div>
+                  </div>
+                </div>
+                <div class="bg-violet-50/30 rounded-lg p-2 border border-violet-100">
+                  <p class="text-[10px] font-bold text-violet-600 mb-1">Transfer</p>
+                  <div class="text-[10px] text-slate-600 space-y-0.5">
+                    <div class="flex justify-between"><span>DP</span><span class="font-bold">${fmtRp(transfer.dp)}</span></div>
+                    <div class="flex justify-between"><span>Pelunasan</span><span class="font-bold">${fmtRp(transfer.pelunasan)}</span></div>
+                  </div>
+                </div>
               </div>
             </div>
-          </div>` : ""}
+            ${(sm.totalPengeluaran || 0) > 0 ? `
+            <div>
+              <p class="text-[10px] font-black text-slate-700 uppercase tracking-wider mb-1.5">Pengeluaran per Kategori</p>
+              <div class="bg-red-50/40 rounded-lg p-2 border border-red-100">
+                ${pengKategoriHtml || `<p class="text-[10px] text-slate-500 italic">Belum ada pengeluaran.</p>`}
+              </div>
+            </div>` : ""}
+          </div>
+
           <div class="bg-emerald-50 rounded-xl p-3 border border-emerald-200 flex justify-between items-center">
             <div>
               <p class="text-[10px] font-black text-emerald-700 uppercase tracking-wider">Saldo Akhir Kas (Live)</p>
-              <p class="text-[9px] text-emerald-600 font-medium">Modal + Tunai − Pengeluaran</p>
+              <p class="text-[10px] text-emerald-600 font-medium">Modal + Tunai − Pengeluaran</p>
             </div>
             <p class="text-base font-black text-emerald-700">${fmtRp(totalSaldo)}</p>
           </div>
@@ -5240,12 +5297,61 @@ Terima kasih.`;
     const body = document.getElementById("shiftAdminBody");
     if (!body) return;
     if (!data || data.length === 0) {
-      body.innerHTML = `<p class="text-sm text-slate-400 text-center py-8">Belum ada riwayat shift dalam 30 hari terakhir.</p>`;
+      body.innerHTML = `<p class="text-sm text-slate-500 text-center py-8">Belum ada riwayat shift dalam 30 hari terakhir.</p>`;
+      updateShiftRiwayatCount(0, 0);
+      return;
+    }
+    // [P1-1] Apply filter dari toolbar (search + status) sebelum render
+    const filtered = applyShiftRiwayatFilter(data);
+    if (filtered.length === 0) {
+      body.innerHTML = `<div class="text-center py-12">
+        <div class="w-14 h-14 mx-auto rounded-full bg-slate-100 flex items-center justify-center mb-3">
+          <svg class="w-7 h-7 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+        </div>
+        <p class="text-sm font-bold text-slate-600">Tidak ada shift cocok</p>
+        <p class="text-xs text-slate-500 mt-1">Coba ubah kata kunci atau status filter.</p>
+      </div>`;
+      updateShiftRiwayatCount(0, data.length);
       return;
     }
     // [FIX] Render langsung ke body — tidak boleh buat duplicate id="shiftRekapList"
     // karena getElementById akan ambil yang pertama (di section Laporan).
-    renderShiftRekap(data, body);
+    renderShiftRekap(filtered, body);
+    updateShiftRiwayatCount(filtered.length, data.length);
+  }
+
+  // [P1-1] Filter cache _shiftAdminRiwayatCache berdasarkan search & status
+  function applyShiftRiwayatFilter(data) {
+    const searchEl = document.getElementById("shiftRiwayatSearch");
+    const statusEl = document.getElementById("shiftRiwayatStatusFilter");
+    const q = searchEl ? searchEl.value.trim().toLowerCase() : "";
+    const status = statusEl ? statusEl.value : "all";
+    return data.filter((s) => {
+      if (status !== "all" && s.status !== status) return false;
+      if (q) {
+        const nama = String(s.nama_kasir || s.kasir || "").toLowerCase();
+        if (nama.indexOf(q) === -1) return false;
+      }
+      return true;
+    });
+  }
+
+  // Re-render saat user ubah search/filter
+  function filterShiftRiwayat() {
+    if (_shiftAdminActiveTab !== "riwayat") return;
+    renderShiftAdminRiwayat(_shiftAdminRiwayatCache || []);
+  }
+
+  function updateShiftRiwayatCount(visible, total) {
+    const el = document.getElementById("shiftRiwayatCount");
+    if (!el) return;
+    if (total === 0) {
+      el.innerText = "";
+    } else if (visible === total) {
+      el.innerText = total + " shift";
+    } else {
+      el.innerText = visible + " dari " + total + " shift";
+    }
   }
 
   function loadShiftRekap() {
@@ -5253,14 +5359,8 @@ Terima kasih.`;
     const cont = document.getElementById("shiftRekapList");
     if (!cont) return;
 
-    cont.innerHTML = `<div class="flex flex-col gap-3">${[1,2,3].map(() => `
-      <div class="bg-slate-50 p-4 rounded-2xl animate-pulse flex items-center gap-4">
-        <div class="w-12 h-12 rounded-full bg-slate-200 flex-shrink-0"></div>
-        <div class="flex-1 space-y-2">
-          <div class="h-4 bg-slate-200 rounded-lg w-1/3"></div>
-          <div class="h-3 bg-slate-100 rounded-lg w-2/3"></div>
-        </div>
-      </div>`).join("")}</div>`;
+    // [P1-3] Pakai skeleton helper terpadu
+    renderListSkeleton(cont, 3);
 
     // Default: 30 hari terakhir
     const end = new Date();
@@ -5269,6 +5369,7 @@ Terima kasih.`;
 
     google.script.run
       .withSuccessHandler(function (res) {
+        cont.removeAttribute("aria-busy");
         if (res && res.success) {
           _shiftRekapCache = res.data || [];
           renderShiftRekap(_shiftRekapCache);
@@ -5277,6 +5378,7 @@ Terima kasih.`;
         }
       })
       .withFailureHandler(function (err) {
+        cont.removeAttribute("aria-busy");
         cont.innerHTML = `<p class="text-sm text-red-500 text-center py-6">Error: ${escapeHTML(err.message)}</p>`;
       })
       .getShiftHistory(currentUser.token, start.toISOString(), end.toISOString());
@@ -5359,36 +5461,72 @@ Terima kasih.`;
           <svg class="w-3 h-3 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"></path></svg>
         </button>`;
         detailBlock = `<div id="${detailIdR}" class="hidden mt-3 pt-3 border-t border-dashed border-slate-200 space-y-3">
+          <!-- [P1-2] Layer 1 — Ringkasan: total per metode + total pengeluaran -->
           <div>
             <p class="text-[10px] font-black text-slate-700 uppercase tracking-wider mb-1.5 flex items-center gap-1.5"><span class="w-1 h-3 bg-blue-500 rounded-full"></span>Pemasukan per Metode</p>
-            <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
-              <div class="bg-emerald-50/50 rounded-lg p-2 border border-emerald-100">
-                <div class="flex justify-between items-baseline"><span class="text-[10px] font-bold text-emerald-600">Tunai</span><span class="text-xs font-black text-emerald-700">${fmtRp(tunai.total)}</span></div>
-                <div class="text-[9px] text-slate-500 mt-1 space-y-0.5">
-                  <div class="flex justify-between"><span>DP</span><span class="font-bold">${fmtRp(tunai.dp)}</span></div>
-                  <div class="flex justify-between"><span>Pelunasan</span><span class="font-bold">${fmtRp(tunai.pelunasan)}</span></div>
-                </div>
+            <div class="grid grid-cols-3 gap-2">
+              <div class="bg-emerald-50/50 rounded-lg p-2 border border-emerald-100 text-center">
+                <p class="text-[10px] font-bold text-emerald-600">Tunai</p>
+                <p class="text-xs font-black text-emerald-700 mt-0.5">${fmtRp(tunai.total)}</p>
               </div>
-              <div class="bg-blue-50/50 rounded-lg p-2 border border-blue-100">
-                <div class="flex justify-between items-baseline"><span class="text-[10px] font-bold text-blue-600">QRIS</span><span class="text-xs font-black text-blue-700">${fmtRp(qris.total)}</span></div>
-                <div class="text-[9px] text-slate-500 mt-1 space-y-0.5">
-                  <div class="flex justify-between"><span>DP</span><span class="font-bold">${fmtRp(qris.dp)}</span></div>
-                  <div class="flex justify-between"><span>Pelunasan</span><span class="font-bold">${fmtRp(qris.pelunasan)}</span></div>
-                </div>
+              <div class="bg-blue-50/50 rounded-lg p-2 border border-blue-100 text-center">
+                <p class="text-[10px] font-bold text-blue-600">QRIS</p>
+                <p class="text-xs font-black text-blue-700 mt-0.5">${fmtRp(qris.total)}</p>
               </div>
-              <div class="bg-violet-50/50 rounded-lg p-2 border border-violet-100">
-                <div class="flex justify-between items-baseline"><span class="text-[10px] font-bold text-violet-600">Transfer</span><span class="text-xs font-black text-violet-700">${fmtRp(transfer.total)}</span></div>
-                <div class="text-[9px] text-slate-500 mt-1 space-y-0.5">
-                  <div class="flex justify-between"><span>DP</span><span class="font-bold">${fmtRp(transfer.dp)}</span></div>
-                  <div class="flex justify-between"><span>Pelunasan</span><span class="font-bold">${fmtRp(transfer.pelunasan)}</span></div>
-                </div>
+              <div class="bg-violet-50/50 rounded-lg p-2 border border-violet-100 text-center">
+                <p class="text-[10px] font-bold text-violet-600">Transfer</p>
+                <p class="text-xs font-black text-violet-700 mt-0.5">${fmtRp(transfer.total)}</p>
               </div>
             </div>
           </div>
-          ${pengKategoriHtml ? `<div>
-            <p class="text-[10px] font-black text-slate-700 uppercase tracking-wider mb-1.5 flex items-center gap-1.5"><span class="w-1 h-3 bg-red-500 rounded-full"></span>Pengeluaran per Kategori</p>
-            <div class="bg-red-50/40 rounded-lg p-2 border border-red-100">${pengKategoriHtml}</div>
+          ${pengKategoriHtml ? `
+          <div class="bg-red-50/40 rounded-lg p-2 border border-red-100 flex justify-between items-center">
+            <span class="text-[10px] font-bold text-red-600 uppercase tracking-wider flex items-center gap-1.5">
+              <span class="w-1 h-3 bg-red-500 rounded-full"></span>Total Pengeluaran
+            </span>
+            <span class="text-xs font-black text-red-700">${fmtRp(parseInt(summary.totalPengeluaran) || 0)}</span>
           </div>` : ""}
+
+          <!-- [P1-2] Tombol untuk reveal Layer 2 -->
+          <button onclick="toggleShiftDetail('${detailIdR}__full', this)"
+                  class="w-full text-[10px] font-bold text-slate-600 hover:text-blue-600 hover:bg-slate-50 px-3 py-2 rounded-lg border border-dashed border-slate-300 hover:border-blue-200 transition-colors flex items-center justify-center gap-1.5">
+            <span>Lihat Rincian Penuh</span>
+            <svg class="w-3 h-3 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"></path></svg>
+          </button>
+
+          <!-- [P1-2] Layer 2 — Rincian Penuh: DP/Pelunasan + kategori pengeluaran -->
+          <div id="${detailIdR}__full" class="hidden space-y-3">
+            <div>
+              <p class="text-[10px] font-black text-slate-700 uppercase tracking-wider mb-1.5">Rincian DP & Pelunasan</p>
+              <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <div class="bg-emerald-50/30 rounded-lg p-2 border border-emerald-100">
+                  <p class="text-[10px] font-bold text-emerald-600 mb-1">Tunai</p>
+                  <div class="text-[10px] text-slate-600 space-y-0.5">
+                    <div class="flex justify-between"><span>DP</span><span class="font-bold">${fmtRp(tunai.dp)}</span></div>
+                    <div class="flex justify-between"><span>Pelunasan</span><span class="font-bold">${fmtRp(tunai.pelunasan)}</span></div>
+                  </div>
+                </div>
+                <div class="bg-blue-50/30 rounded-lg p-2 border border-blue-100">
+                  <p class="text-[10px] font-bold text-blue-600 mb-1">QRIS</p>
+                  <div class="text-[10px] text-slate-600 space-y-0.5">
+                    <div class="flex justify-between"><span>DP</span><span class="font-bold">${fmtRp(qris.dp)}</span></div>
+                    <div class="flex justify-between"><span>Pelunasan</span><span class="font-bold">${fmtRp(qris.pelunasan)}</span></div>
+                  </div>
+                </div>
+                <div class="bg-violet-50/30 rounded-lg p-2 border border-violet-100">
+                  <p class="text-[10px] font-bold text-violet-600 mb-1">Transfer</p>
+                  <div class="text-[10px] text-slate-600 space-y-0.5">
+                    <div class="flex justify-between"><span>DP</span><span class="font-bold">${fmtRp(transfer.dp)}</span></div>
+                    <div class="flex justify-between"><span>Pelunasan</span><span class="font-bold">${fmtRp(transfer.pelunasan)}</span></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            ${pengKategoriHtml ? `<div>
+              <p class="text-[10px] font-black text-slate-700 uppercase tracking-wider mb-1.5">Pengeluaran per Kategori</p>
+              <div class="bg-red-50/40 rounded-lg p-2 border border-red-100">${pengKategoriHtml}</div>
+            </div>` : ""}
+          </div>
         </div>`;
       } else if (!isAktif) {
         // Shift sudah ditutup tapi belum punya breakdown_json (data lama) — sediakan tombol recompute
@@ -5485,14 +5623,11 @@ Terima kasih.`;
       return;
     }
     const btn = document.getElementById("btnSubmitForceClose");
-    const orig = btn.innerHTML;
-    btn.innerHTML = "Memproses...";
-    btn.disabled = true;
+    setBtnLoading(btn, true, "Memproses...");
 
     google.script.run
       .withSuccessHandler(function (res) {
-        btn.innerHTML = orig;
-        btn.disabled = false;
+        setBtnLoading(btn, false);
         if (res && res.success) {
           showToast("Shift berhasil di-force close");
           closeForceCloseShiftModal();
@@ -5508,8 +5643,7 @@ Terima kasih.`;
         }
       })
       .withFailureHandler(function (err) {
-        btn.innerHTML = orig;
-        btn.disabled = false;
+        setBtnLoading(btn, false);
         showToast("Error: " + err.message, "error");
       })
       .forceCloseShift(currentUser.token, _forceClosePendingId, catatan);
