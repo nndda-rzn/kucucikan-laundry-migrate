@@ -674,6 +674,9 @@
       
       const userDesk = document.getElementById("adminUsersDesktop");
       if (userDesk) userDesk.classList.toggle("hidden", !isAdmin);
+
+      const shiftDesk = document.getElementById("adminShiftDesktop");
+      if (shiftDesk) shiftDesk.classList.toggle("hidden", !isAdmin);
       } catch (e) {
         console.error("[setupDashboard] header/sidebar error:", e);
       }
@@ -1030,6 +1033,7 @@
         paket: "adminMenuDesktop",
         settings: "adminSettingsDesktop",
         pegawai: "adminUsersDesktop",
+        shift: "adminShiftDesktop",
       };
       const adminBtnId = adminMap[name];
       if (adminBtnId) {
@@ -1083,6 +1087,11 @@
     }
     if (name === "pegawai") {
       fetchUsers();
+    }
+    if (name === "shift") {
+      if (currentUser && currentUser.role === "admin") {
+        loadShiftAdminTab(_shiftAdminActiveTab || "aktif");
+      }
     }
     if (name === "kas") {
       fetchKasHarian();
@@ -4457,33 +4466,7 @@ Terima kasih.`;
   }
 
   function submitUangAwal() {
-    const nominal = parseInt(document.getElementById("inputUangAwal").value) || 0;
-    if (nominal <= 0) {
-      showToast("Nominal uang awal tidak valid!", "error");
-      return;
-    }
-    
-    const filterInput = document.getElementById("kasDateFilter");
-    const dateStr = filterInput ? filterInput.value : "";
-    
-    showLoading(true);
-    google.script.run
-      .withSuccessHandler(function(res) {
-        showLoading(false);
-        if (res && res.success) {
-          showToast(res.isUpdate ? "Uang awal diperbarui!" : "Uang awal berhasil disimpan!");
-          document.getElementById("inputUangAwal").value = "";
-          fetchKasHarian();
-          // [OPT] Hapus loadTransactions(true) — data transaksi tidak berubah saat simpan uang awal
-        } else {
-          showToast(res ? res.message : "Gagal menyimpan uang awal.", "error");
-        }
-      })
-      .withFailureHandler(function(err) {
-        showLoading(false);
-        showToast("Error koneksi: " + err.message, "error");
-      })
-      .saveUangAwal(currentUser.token, nominal, dateStr);
+    showToast("Input uang awal kini otomatis lewat Buka Shift.", "info");
   }
 
   function submitPengeluaran() {
@@ -4742,24 +4725,96 @@ Terima kasih.`;
     const cont = document.getElementById("shiftSummaryRows");
     if (!cont) return;
     const fmtRp = (n) => "Rp " + (parseInt(n) || 0).toLocaleString("id-ID");
-    const rows = [
-      { label: "Modal Awal", value: fmtRp(summary.modalAwal), cls: "text-slate-700" },
-      { label: "Jumlah Order", value: (summary.jumlahOrder || 0) + "x", cls: "text-slate-700" },
-      { label: "Total Tunai", value: fmtRp(summary.totalTunai), cls: "text-emerald-600" },
-      { label: "Total Non-Tunai", value: fmtRp(summary.totalNonTunai), cls: "text-blue-600" },
-      { label: "Total Pengeluaran", value: fmtRp(summary.totalPengeluaran || 0), cls: "text-red-500" },
-    ];
-    let html = "";
-    for (const r of rows) {
-      html += `<div class="flex justify-between items-center py-2 border-b border-slate-100">
-        <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">${escapeHTML(r.label)}</span>
-        <span class="text-sm font-black ${r.cls}">${escapeHTML(r.value)}</span>
+    const bm = summary.breakdownMetode || {};
+    const bp = summary.breakdownPengeluaran || {};
+    const tunai = bm.Tunai || { dp: 0, pelunasan: 0, total: 0, count: 0 };
+    const qris = bm.QRIS || { dp: 0, pelunasan: 0, total: 0, count: 0 };
+    const transfer = bm.Transfer || { dp: 0, pelunasan: 0, total: 0, count: 0 };
+    const lainnya = bm.Lainnya || { dp: 0, pelunasan: 0, total: 0, count: 0 };
+
+    const rowItem = (label, value, cls = "text-slate-700", sub = "") => `
+      <div class="flex justify-between items-center py-2 ${sub ? "" : "border-b border-slate-100"}">
+        <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">${escapeHTML(label)}</span>
+        <span class="text-sm font-black ${cls}">${escapeHTML(value)}</span>
+      </div>${sub ? `<p class="text-[10px] text-slate-400 -mt-1 mb-2 pl-1">${sub}</p>` : ""}`;
+
+    const subRow = (label, value, cls = "text-slate-600") => `
+      <div class="flex justify-between items-center py-1 pl-3">
+        <span class="text-[11px] text-slate-500">• ${escapeHTML(label)}</span>
+        <span class="text-xs font-bold ${cls}">${escapeHTML(value)}</span>
       </div>`;
+
+    const sectionTitle = (label, badge = "") => `
+      <div class="flex items-center gap-2 mt-4 mb-1.5 pt-2 border-t-2 border-slate-100">
+        <div class="w-1 h-4 bg-blue-500 rounded-full"></div>
+        <h6 class="text-[11px] font-black text-slate-700 uppercase tracking-wider">${escapeHTML(label)}</h6>
+        ${badge}
+      </div>`;
+
+    const pengeluaranRows = [];
+    Object.keys(bp).forEach((kat) => {
+      const item = bp[kat];
+      if (!item || item.jumlah <= 0) return;
+      pengeluaranRows.push(subRow(`${kat} (${item.count}x)`, fmtRp(item.jumlah), "text-red-500"));
+    });
+
+    let html = "";
+    // ── Header info
+    html += rowItem("Modal Awal", fmtRp(summary.modalAwal), "text-slate-700");
+    html += rowItem("Jumlah Order", (summary.jumlahOrder || 0) + "x", "text-slate-700");
+
+    // ── Breakdown Pemasukan per Metode
+    html += sectionTitle("Pemasukan per Metode");
+    if (tunai.total > 0 || tunai.count > 0) {
+      html += rowItem("Tunai", fmtRp(tunai.total), "text-emerald-600");
+      if (tunai.dp > 0) html += subRow("DP/Bayar Penuh", fmtRp(tunai.dp), "text-emerald-600");
+      if (tunai.pelunasan > 0) html += subRow("Pelunasan", fmtRp(tunai.pelunasan), "text-emerald-600");
     }
-    html += `<div class="flex justify-between items-center pt-3 mt-1 bg-emerald-50 rounded-xl px-4 py-3">
-      <span class="text-xs font-bold text-emerald-600 uppercase tracking-wider">Saldo Akhir</span>
+    if (qris.total > 0 || qris.count > 0) {
+      html += rowItem("QRIS", fmtRp(qris.total), "text-blue-600");
+      if (qris.dp > 0) html += subRow("DP/Bayar Penuh", fmtRp(qris.dp), "text-blue-600");
+      if (qris.pelunasan > 0) html += subRow("Pelunasan", fmtRp(qris.pelunasan), "text-blue-600");
+    }
+    if (transfer.total > 0 || transfer.count > 0) {
+      html += rowItem("Transfer", fmtRp(transfer.total), "text-violet-600");
+      if (transfer.dp > 0) html += subRow("DP/Bayar Penuh", fmtRp(transfer.dp), "text-violet-600");
+      if (transfer.pelunasan > 0) html += subRow("Pelunasan", fmtRp(transfer.pelunasan), "text-violet-600");
+    }
+    if (lainnya.total > 0) {
+      html += rowItem("Lainnya", fmtRp(lainnya.total), "text-slate-600");
+    }
+    if (tunai.total + qris.total + transfer.total + lainnya.total === 0) {
+      html += `<p class="text-xs text-slate-400 text-center py-2 italic">Tidak ada pemasukan di shift ini.</p>`;
+    }
+
+    // ── Breakdown DP vs Pelunasan
+    if ((summary.totalDp || 0) > 0 || (summary.totalPelunasan || 0) > 0) {
+      html += sectionTitle("Jenis Penerimaan");
+      html += rowItem("Total DP/Bayar Awal", fmtRp(summary.totalDp || 0), "text-slate-700");
+      html += rowItem("Total Pelunasan", fmtRp(summary.totalPelunasan || 0), "text-slate-700");
+    }
+
+    // ── Pengeluaran per Kategori
+    html += sectionTitle("Pengeluaran per Kategori");
+    if (pengeluaranRows.length > 0) {
+      html += pengeluaranRows.join("");
+      html += `<div class="flex justify-between items-center py-2 mt-1 border-t border-dashed border-slate-200">
+        <span class="text-xs font-bold text-red-500 uppercase tracking-wider">Total Pengeluaran</span>
+        <span class="text-sm font-black text-red-600">${escapeHTML(fmtRp(summary.totalPengeluaran || 0))}</span>
+      </div>`;
+    } else {
+      html += `<p class="text-xs text-slate-400 text-center py-2 italic">Tidak ada pengeluaran.</p>`;
+    }
+
+    // ── Saldo Akhir highlight
+    html += `<div class="flex justify-between items-center pt-3 mt-3 bg-emerald-50 rounded-xl px-4 py-3 border border-emerald-100">
+      <div>
+        <span class="text-[10px] font-bold text-emerald-600 uppercase tracking-wider block">Saldo Akhir Kas</span>
+        <span class="text-[9px] text-emerald-500 font-medium">Modal + Tunai − Pengeluaran</span>
+      </div>
       <span class="text-lg font-black text-emerald-700">${escapeHTML(fmtRp(summary.saldoAkhir || 0))}</span>
     </div>`;
+
     cont.innerHTML = html;
     const modal = document.getElementById("shiftSummaryModal");
     const content = document.getElementById("shiftSummaryContent");
@@ -4780,6 +4835,332 @@ Terima kasih.`;
 
   // [SHIFT] Admin: Rekap Shift di halaman Laporan
   let _shiftRekapCache = [];
+
+  // [SHIFT] Admin: state untuk section Manajemen Shift
+  let _shiftAdminActiveTab = "aktif";
+  let _shiftAdminAktifCache = [];
+  let _shiftAdminRiwayatCache = [];
+
+  function loadShiftAdminTab(tab) {
+    if (!currentUser || currentUser.role !== "admin") return;
+    _shiftAdminActiveTab = tab || "aktif";
+
+    // Toggle tab styling
+    const tabAktif = document.getElementById("shiftTabAktif");
+    const tabRiwayat = document.getElementById("shiftTabRiwayat");
+    if (tabAktif && tabRiwayat) {
+      const activeCls = ["bg-white", "text-blue-700", "shadow-sm"];
+      const inactiveCls = ["text-slate-500", "hover:text-slate-800"];
+      [tabAktif, tabRiwayat].forEach((el) => {
+        el.classList.remove(...activeCls, ...inactiveCls);
+      });
+      if (_shiftAdminActiveTab === "aktif") {
+        tabAktif.classList.add(...activeCls);
+        tabRiwayat.classList.add(...inactiveCls);
+      } else {
+        tabRiwayat.classList.add(...activeCls);
+        tabAktif.classList.add(...inactiveCls);
+      }
+    }
+
+    const body = document.getElementById("shiftAdminBody");
+    if (body) {
+      body.innerHTML = `<div class="space-y-3">${[1, 2, 3]
+        .map(
+          () => `<div class="bg-slate-50 p-4 rounded-2xl animate-pulse flex items-center gap-4">
+            <div class="w-12 h-12 rounded-full bg-slate-200 flex-shrink-0"></div>
+            <div class="flex-1 space-y-2">
+              <div class="h-4 bg-slate-200 rounded-lg w-1/3"></div>
+              <div class="h-3 bg-slate-100 rounded-lg w-2/3"></div>
+            </div>
+          </div>`,
+        )
+        .join("")}</div>`;
+    }
+
+    if (_shiftAdminActiveTab === "aktif") {
+      google.script.run
+        .withSuccessHandler(function (res) {
+          if (res && res.success) {
+            _shiftAdminAktifCache = res.data || [];
+            updateShiftAdminStatCards(_shiftAdminAktifCache);
+            renderShiftAdminAktif(_shiftAdminAktifCache);
+          } else {
+            if (body)
+              body.innerHTML = `<p class="text-sm text-red-500 text-center py-8">${escapeHTML(res ? res.message : "Gagal memuat shift aktif")}</p>`;
+          }
+        })
+        .withFailureHandler(function (err) {
+          if (body)
+            body.innerHTML = `<p class="text-sm text-red-500 text-center py-8">Error: ${escapeHTML(err.message)}</p>`;
+        })
+        .getAllActiveShifts(currentUser.token);
+    } else {
+      const end = new Date();
+      const start = new Date();
+      start.setDate(start.getDate() - 30);
+      google.script.run
+        .withSuccessHandler(function (res) {
+          if (res && res.success) {
+            _shiftAdminRiwayatCache = res.data || [];
+            renderShiftAdminRiwayat(_shiftAdminRiwayatCache);
+          } else {
+            if (body)
+              body.innerHTML = `<p class="text-sm text-red-500 text-center py-8">${escapeHTML(res ? res.message : "Gagal memuat riwayat")}</p>`;
+          }
+        })
+        .withFailureHandler(function (err) {
+          if (body)
+            body.innerHTML = `<p class="text-sm text-red-500 text-center py-8">Error: ${escapeHTML(err.message)}</p>`;
+        })
+        .getShiftHistory(currentUser.token, start.toISOString(), end.toISOString());
+    }
+  }
+
+  function updateShiftAdminStatCards(aktifList) {
+    const count = aktifList.length;
+    let totalModal = 0;
+    let totalLive = 0;
+    aktifList.forEach((s) => {
+      totalModal += parseInt(s.modal_awal) || 0;
+      const sm = s.live_summary || {};
+      totalLive += (parseInt(sm.totalTunai) || 0) + (parseInt(sm.totalNonTunai) || 0);
+    });
+    const fmtRp = (n) => "Rp " + (parseInt(n) || 0).toLocaleString("id-ID");
+    const elCount = document.getElementById("shiftAdminCountAktif");
+    const elModal = document.getElementById("shiftAdminTotalModal");
+    const elLive = document.getElementById("shiftAdminTotalLive");
+    if (elCount) elCount.innerText = count;
+    if (elModal) elModal.innerText = fmtRp(totalModal);
+    if (elLive) elLive.innerText = fmtRp(totalLive);
+  }
+
+  function renderShiftAdminAktif(data) {
+    const body = document.getElementById("shiftAdminBody");
+    if (!body) return;
+    if (!data || data.length === 0) {
+      body.innerHTML = `<div class="text-center py-12">
+        <div class="w-16 h-16 mx-auto rounded-full bg-slate-100 flex items-center justify-center mb-3">
+          <svg class="w-8 h-8 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+        </div>
+        <p class="text-sm font-bold text-slate-600">Tidak ada shift aktif</p>
+        <p class="text-xs text-slate-400 mt-1">Semua kasir sudah menutup shift atau belum membuka shift hari ini.</p>
+      </div>`;
+      return;
+    }
+
+    const fmtRp = (n) => "Rp " + (parseInt(n) || 0).toLocaleString("id-ID");
+    const fmtDt = (s) => {
+      if (!s) return "-";
+      const d = new Date(s);
+      return isNaN(d) ? "-" : d.toLocaleString("id-ID", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+    };
+    const fmtDur = (a) => {
+      const da = a ? new Date(a) : null;
+      if (!da || isNaN(da)) return "-";
+      const ms = new Date().getTime() - da.getTime();
+      if (ms < 0) return "-";
+      const h = Math.floor(ms / 3600000);
+      const m = Math.floor((ms % 3600000) / 60000);
+      return h + "j " + m + "m";
+    };
+
+    const parts = [];
+    for (let i = 0; i < data.length; i++) {
+      const s = data[i];
+      const sm = s.live_summary || {};
+      const bm = sm.breakdownMetode || {};
+      const bp = sm.breakdownPengeluaran || {};
+      const tunai = bm.Tunai || { dp: 0, pelunasan: 0, total: 0, count: 0 };
+      const qris = bm.QRIS || { dp: 0, pelunasan: 0, total: 0, count: 0 };
+      const transfer = bm.Transfer || { dp: 0, pelunasan: 0, total: 0, count: 0 };
+
+      // Breakdown pengeluaran kategori (hanya yang > 0)
+      const pengKategoriHtml = Object.keys(bp)
+        .filter((k) => bp[k] && bp[k].jumlah > 0)
+        .map(
+          (k) =>
+            `<div class="flex justify-between text-[10px] py-0.5">
+              <span class="text-slate-500">• ${escapeHTML(k)} (${bp[k].count}x)</span>
+              <span class="font-bold text-red-500">${fmtRp(bp[k].jumlah)}</span>
+            </div>`,
+        )
+        .join("");
+
+      const detailId = `shiftDetail_${escapeHTML(s.id)}`;
+      const totalSaldo = (parseInt(s.modal_awal) || 0) + (parseInt(sm.totalTunai) || 0) - (parseInt(sm.totalPengeluaran) || 0);
+
+      parts.push(`<div class="bg-white border border-emerald-100 rounded-2xl p-4 shadow-sm hover:shadow-md transition-all relative overflow-hidden">
+        <div class="absolute top-0 left-0 w-1 h-full bg-emerald-500"></div>
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-3 pl-2">
+          <div class="flex items-center gap-3">
+            <div class="w-11 h-11 rounded-full bg-emerald-100 text-emerald-700 font-black flex items-center justify-center text-sm relative">
+              ${escapeHTML((s.nama_kasir || s.kasir || "?").charAt(0).toUpperCase())}
+              <span class="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-500 rounded-full border-2 border-white animate-pulse"></span>
+            </div>
+            <div>
+              <div class="flex items-center gap-2 flex-wrap">
+                <h5 class="text-sm font-black text-slate-900">${escapeHTML(s.nama_kasir || s.kasir || "Kasir")}</h5>
+                <span class="bg-emerald-50 text-emerald-600 border border-emerald-200 text-[9px] font-bold uppercase tracking-wider px-2 py-1 rounded">Aktif</span>
+              </div>
+              <p class="text-[10px] font-bold text-slate-500 mt-0.5">Mulai: ${fmtDt(s.waktu_mulai)} (${fmtDur(s.waktu_mulai)})</p>
+            </div>
+          </div>
+          <div class="flex items-center gap-2">
+            <button onclick="toggleShiftDetail('${detailId}', this)" class="text-[10px] font-bold bg-slate-50 text-slate-600 hover:bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200 transition-colors flex items-center gap-1">
+              <span>Detail</span>
+              <svg class="w-3 h-3 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"></path></svg>
+            </button>
+            <button onclick="openForceCloseShiftModal('${escapeHTML(s.id)}','${escapeHTML(s.nama_kasir || "")}','${escapeHTML(s.kasir || "")}')" class="text-[10px] font-bold bg-amber-50 text-amber-600 hover:bg-amber-100 px-3 py-1.5 rounded-lg border border-amber-200 transition-colors">Force Close</button>
+          </div>
+        </div>
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs pl-2">
+          <div class="bg-slate-50 rounded-lg p-2">
+            <p class="text-[9px] font-bold text-slate-400 uppercase">Modal</p>
+            <p class="font-black text-slate-700 mt-0.5">${fmtRp(s.modal_awal)}</p>
+          </div>
+          <div class="bg-emerald-50 rounded-lg p-2">
+            <p class="text-[9px] font-bold text-emerald-500 uppercase">Tunai</p>
+            <p class="font-black text-emerald-700 mt-0.5">${fmtRp(sm.totalTunai)}</p>
+          </div>
+          <div class="bg-blue-50 rounded-lg p-2">
+            <p class="text-[9px] font-bold text-blue-500 uppercase">Non-Tunai</p>
+            <p class="font-black text-blue-700 mt-0.5">${fmtRp(sm.totalNonTunai)}</p>
+          </div>
+          <div class="bg-amber-50 rounded-lg p-2">
+            <p class="text-[9px] font-bold text-amber-500 uppercase">Order</p>
+            <p class="font-black text-amber-700 mt-0.5">${sm.jumlahOrder || 0}x</p>
+          </div>
+        </div>
+        <div id="${detailId}" class="hidden mt-3 pl-2 pt-3 border-t border-dashed border-slate-200 space-y-3">
+          <div>
+            <p class="text-[10px] font-black text-slate-700 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+              <span class="w-1 h-3 bg-blue-500 rounded-full"></span>Pemasukan per Metode
+            </p>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <div class="bg-emerald-50/50 rounded-lg p-2 border border-emerald-100">
+                <div class="flex justify-between items-baseline">
+                  <span class="text-[10px] font-bold text-emerald-600">Tunai</span>
+                  <span class="text-xs font-black text-emerald-700">${fmtRp(tunai.total)}</span>
+                </div>
+                <div class="text-[9px] text-slate-500 mt-1 space-y-0.5">
+                  <div class="flex justify-between"><span>DP</span><span class="font-bold">${fmtRp(tunai.dp)}</span></div>
+                  <div class="flex justify-between"><span>Pelunasan</span><span class="font-bold">${fmtRp(tunai.pelunasan)}</span></div>
+                </div>
+              </div>
+              <div class="bg-blue-50/50 rounded-lg p-2 border border-blue-100">
+                <div class="flex justify-between items-baseline">
+                  <span class="text-[10px] font-bold text-blue-600">QRIS</span>
+                  <span class="text-xs font-black text-blue-700">${fmtRp(qris.total)}</span>
+                </div>
+                <div class="text-[9px] text-slate-500 mt-1 space-y-0.5">
+                  <div class="flex justify-between"><span>DP</span><span class="font-bold">${fmtRp(qris.dp)}</span></div>
+                  <div class="flex justify-between"><span>Pelunasan</span><span class="font-bold">${fmtRp(qris.pelunasan)}</span></div>
+                </div>
+              </div>
+              <div class="bg-violet-50/50 rounded-lg p-2 border border-violet-100">
+                <div class="flex justify-between items-baseline">
+                  <span class="text-[10px] font-bold text-violet-600">Transfer</span>
+                  <span class="text-xs font-black text-violet-700">${fmtRp(transfer.total)}</span>
+                </div>
+                <div class="text-[9px] text-slate-500 mt-1 space-y-0.5">
+                  <div class="flex justify-between"><span>DP</span><span class="font-bold">${fmtRp(transfer.dp)}</span></div>
+                  <div class="flex justify-between"><span>Pelunasan</span><span class="font-bold">${fmtRp(transfer.pelunasan)}</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          ${(sm.totalPengeluaran || 0) > 0 ? `
+          <div>
+            <p class="text-[10px] font-black text-slate-700 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+              <span class="w-1 h-3 bg-red-500 rounded-full"></span>Pengeluaran per Kategori
+            </p>
+            <div class="bg-red-50/40 rounded-lg p-2 border border-red-100">
+              ${pengKategoriHtml || `<p class="text-[10px] text-slate-400 italic">Belum ada pengeluaran.</p>`}
+              <div class="flex justify-between items-center pt-1.5 mt-1.5 border-t border-dashed border-red-200">
+                <span class="text-[10px] font-bold text-red-600 uppercase">Total</span>
+                <span class="text-xs font-black text-red-700">${fmtRp(sm.totalPengeluaran || 0)}</span>
+              </div>
+            </div>
+          </div>` : ""}
+          <div class="bg-emerald-50 rounded-xl p-3 border border-emerald-200 flex justify-between items-center">
+            <div>
+              <p class="text-[10px] font-black text-emerald-700 uppercase tracking-wider">Saldo Akhir Kas (Live)</p>
+              <p class="text-[9px] text-emerald-600 font-medium">Modal + Tunai − Pengeluaran</p>
+            </div>
+            <p class="text-base font-black text-emerald-700">${fmtRp(totalSaldo)}</p>
+          </div>
+        </div>
+      </div>`);
+    }
+    body.innerHTML = parts.join("");
+  }
+
+  // [SHIFT] Toggle expand/collapse detail breakdown shift
+  function toggleShiftDetail(detailId, btn) {
+    const el = document.getElementById(detailId);
+    if (!el) return;
+    const isHidden = el.classList.toggle("hidden");
+    if (btn) {
+      const icon = btn.querySelector("svg");
+      if (icon) icon.style.transform = isHidden ? "rotate(0deg)" : "rotate(180deg)";
+    }
+  }
+
+  // [SHIFT] Recompute breakdown untuk shift lama (pre-migration breakdown_json).
+  // Memanggil backend recomputeShiftBreakdown yang akan persist ke kolom breakdown_json
+  // sehingga panggilan getShiftHistory berikutnya langsung punya breakdown.
+  function recomputeShiftBreakdownUI(shiftId, btn) {
+    if (!currentUser || currentUser.role !== "admin") return;
+    if (!shiftId) return;
+    const orig = btn ? btn.innerHTML : "";
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = `<svg class="w-3 h-3 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg><span>Menghitung...</span>`;
+    }
+    google.script.run
+      .withSuccessHandler(function (res) {
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = orig;
+        }
+        if (res && res.success) {
+          showToast("Breakdown berhasil dihitung. Memuat ulang...");
+          // Refresh tab aktif (Manajemen Shift) atau Laporan
+          const sectionShift = document.getElementById("section-shift");
+          if (sectionShift && !sectionShift.classList.contains("hidden")) {
+            loadShiftAdminTab(_shiftAdminActiveTab || "riwayat");
+          } else {
+            loadShiftRekap();
+          }
+        } else {
+          showToast(res ? res.message : "Gagal menghitung breakdown.", "error");
+        }
+      })
+      .withFailureHandler(function (err) {
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = orig;
+        }
+        showToast("Error: " + err.message, "error");
+      })
+      .recomputeShiftBreakdown(currentUser.token, shiftId);
+  }
+
+  function renderShiftAdminRiwayat(data) {
+    const body = document.getElementById("shiftAdminBody");
+    if (!body) return;
+    if (!data || data.length === 0) {
+      body.innerHTML = `<p class="text-sm text-slate-400 text-center py-8">Belum ada riwayat shift dalam 30 hari terakhir.</p>`;
+      return;
+    }
+    // Reuse rendering logic dari renderShiftRekap (Laporan) — tinggal arahkan ke container ini
+    const tmp = document.createElement("div");
+    tmp.id = "shiftRekapList";
+    body.innerHTML = "";
+    body.appendChild(tmp);
+    renderShiftRekap(data);
+  }
 
   function loadShiftRekap() {
     if (!currentUser || currentUser.role !== "admin") return;
@@ -4864,6 +5245,73 @@ Terima kasih.`;
         ? `<button onclick="openForceCloseShiftModal('${escapeHTML(s.id)}','${escapeHTML(s.nama_kasir)}','${escapeHTML(s.kasir)}')" class="text-[10px] font-bold bg-amber-50 text-amber-600 hover:bg-amber-100 px-3 py-1.5 rounded-lg border border-amber-200 transition-colors">Force Close</button>`
         : "";
 
+      // [SHIFT] Detail breakdown — tersedia untuk shift Aktif & shift sudah ditutup (post-migration breakdown_json).
+      // Untuk shift lama (pre-migration), tampilkan tombol "Recompute" agar admin bisa migrasi on-demand.
+      const bm = (s.live_summary && s.live_summary.breakdownMetode) || null;
+      const bp = (s.live_summary && s.live_summary.breakdownPengeluaran) || null;
+      const detailIdR = `shiftDetailR_${escapeHTML(s.id)}`;
+      let detailBtn = "";
+      let detailBlock = "";
+      if (bm) {
+        const tunai = bm.Tunai || { dp: 0, pelunasan: 0, total: 0 };
+        const qris = bm.QRIS || { dp: 0, pelunasan: 0, total: 0 };
+        const transfer = bm.Transfer || { dp: 0, pelunasan: 0, total: 0 };
+        const pengKategoriHtml = bp
+          ? Object.keys(bp)
+              .filter((k) => bp[k] && bp[k].jumlah > 0)
+              .map(
+                (k) =>
+                  `<div class="flex justify-between text-[10px] py-0.5">
+                    <span class="text-slate-500">• ${escapeHTML(k)} (${bp[k].count}x)</span>
+                    <span class="font-bold text-red-500">${fmtRp(bp[k].jumlah)}</span>
+                  </div>`,
+              )
+              .join("")
+          : "";
+        detailBtn = `<button onclick="toggleShiftDetail('${detailIdR}', this)" class="text-[10px] font-bold bg-slate-50 text-slate-600 hover:bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200 transition-colors flex items-center gap-1">
+          <span>Detail</span>
+          <svg class="w-3 h-3 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"></path></svg>
+        </button>`;
+        detailBlock = `<div id="${detailIdR}" class="hidden mt-3 pt-3 border-t border-dashed border-slate-200 space-y-3">
+          <div>
+            <p class="text-[10px] font-black text-slate-700 uppercase tracking-wider mb-1.5 flex items-center gap-1.5"><span class="w-1 h-3 bg-blue-500 rounded-full"></span>Pemasukan per Metode</p>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <div class="bg-emerald-50/50 rounded-lg p-2 border border-emerald-100">
+                <div class="flex justify-between items-baseline"><span class="text-[10px] font-bold text-emerald-600">Tunai</span><span class="text-xs font-black text-emerald-700">${fmtRp(tunai.total)}</span></div>
+                <div class="text-[9px] text-slate-500 mt-1 space-y-0.5">
+                  <div class="flex justify-between"><span>DP</span><span class="font-bold">${fmtRp(tunai.dp)}</span></div>
+                  <div class="flex justify-between"><span>Pelunasan</span><span class="font-bold">${fmtRp(tunai.pelunasan)}</span></div>
+                </div>
+              </div>
+              <div class="bg-blue-50/50 rounded-lg p-2 border border-blue-100">
+                <div class="flex justify-between items-baseline"><span class="text-[10px] font-bold text-blue-600">QRIS</span><span class="text-xs font-black text-blue-700">${fmtRp(qris.total)}</span></div>
+                <div class="text-[9px] text-slate-500 mt-1 space-y-0.5">
+                  <div class="flex justify-between"><span>DP</span><span class="font-bold">${fmtRp(qris.dp)}</span></div>
+                  <div class="flex justify-between"><span>Pelunasan</span><span class="font-bold">${fmtRp(qris.pelunasan)}</span></div>
+                </div>
+              </div>
+              <div class="bg-violet-50/50 rounded-lg p-2 border border-violet-100">
+                <div class="flex justify-between items-baseline"><span class="text-[10px] font-bold text-violet-600">Transfer</span><span class="text-xs font-black text-violet-700">${fmtRp(transfer.total)}</span></div>
+                <div class="text-[9px] text-slate-500 mt-1 space-y-0.5">
+                  <div class="flex justify-between"><span>DP</span><span class="font-bold">${fmtRp(transfer.dp)}</span></div>
+                  <div class="flex justify-between"><span>Pelunasan</span><span class="font-bold">${fmtRp(transfer.pelunasan)}</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          ${pengKategoriHtml ? `<div>
+            <p class="text-[10px] font-black text-slate-700 uppercase tracking-wider mb-1.5 flex items-center gap-1.5"><span class="w-1 h-3 bg-red-500 rounded-full"></span>Pengeluaran per Kategori</p>
+            <div class="bg-red-50/40 rounded-lg p-2 border border-red-100">${pengKategoriHtml}</div>
+          </div>` : ""}
+        </div>`;
+      } else if (!isAktif) {
+        // Shift sudah ditutup tapi belum punya breakdown_json (data lama) — sediakan tombol recompute
+        detailBtn = `<button onclick="recomputeShiftBreakdownUI('${escapeHTML(s.id)}', this)" class="text-[10px] font-bold bg-amber-50 text-amber-700 hover:bg-amber-100 px-3 py-1.5 rounded-lg border border-amber-200 transition-colors flex items-center gap-1" title="Hitung ulang breakdown untuk shift lama">
+          <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+          <span>Hitung Detail</span>
+        </button>`;
+      }
+
       parts.push(`<div class="bg-white border border-slate-100 rounded-2xl p-4 shadow-sm hover:shadow-md transition-all">
         <div class="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-3">
           <div class="flex items-center gap-3">
@@ -4876,7 +5324,10 @@ Terima kasih.`;
               <p class="text-[10px] font-bold text-slate-500 mt-0.5">${fmtDt(s.waktu_mulai)} → ${fmtDt(s.waktu_selesai) || "Sekarang"} (${fmtDur(s.waktu_mulai, s.waktu_selesai)})</p>
             </div>
           </div>
-          ${forceBtn}
+          <div class="flex items-center gap-2">
+            ${detailBtn}
+            ${forceBtn}
+          </div>
         </div>
         <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
           <div class="bg-slate-50 rounded-lg p-2">
@@ -4907,6 +5358,7 @@ Terima kasih.`;
             <p class="font-black text-violet-700 mt-0.5">${fmtRp(summary.saldoAkhir || 0)}</p>
           </div>
         </div>` : ""}
+        ${detailBlock}
         ${s.catatan ? `<p class="text-[10px] text-slate-500 mt-2 italic">"${escapeHTML(s.catatan)}"</p>` : ""}
       </div>`);
     }
@@ -4958,7 +5410,13 @@ Terima kasih.`;
         if (res && res.success) {
           showToast("Shift berhasil di-force close");
           closeForceCloseShiftModal();
-          loadShiftRekap();
+          // Refresh tampilan yang sedang aktif
+          const sectionShift = document.getElementById("section-shift");
+          if (sectionShift && !sectionShift.classList.contains("hidden")) {
+            loadShiftAdminTab(_shiftAdminActiveTab || "aktif");
+          } else {
+            loadShiftRekap();
+          }
         } else {
           showToast(res ? res.message : "Gagal force close", "error");
         }
