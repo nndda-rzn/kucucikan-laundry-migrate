@@ -5154,12 +5154,9 @@ Terima kasih.`;
       body.innerHTML = `<p class="text-sm text-slate-400 text-center py-8">Belum ada riwayat shift dalam 30 hari terakhir.</p>`;
       return;
     }
-    // Reuse rendering logic dari renderShiftRekap (Laporan) — tinggal arahkan ke container ini
-    const tmp = document.createElement("div");
-    tmp.id = "shiftRekapList";
-    body.innerHTML = "";
-    body.appendChild(tmp);
-    renderShiftRekap(data);
+    // [FIX] Render langsung ke body — tidak boleh buat duplicate id="shiftRekapList"
+    // karena getElementById akan ambil yang pertama (di section Laporan).
+    renderShiftRekap(data, body);
   }
 
   function loadShiftRekap() {
@@ -5196,8 +5193,8 @@ Terima kasih.`;
       .getShiftHistory(currentUser.token, start.toISOString(), end.toISOString());
   }
 
-  function renderShiftRekap(data) {
-    const cont = document.getElementById("shiftRekapList");
+  function renderShiftRekap(data, targetEl) {
+    const cont = targetEl || document.getElementById("shiftRekapList");
     if (!cont) return;
     if (!data || data.length === 0) {
       cont.innerHTML = `<p class="text-sm text-slate-400 text-center py-6">Belum ada shift dalam 30 hari terakhir.</p>`;
