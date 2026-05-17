@@ -18,6 +18,8 @@
   const TRX_CACHE_TTL = 60000; // 1 menit TTL
   let customersCacheTime = 0; // [OPT] Client-side customer cache
   const CUSTOMERS_CACHE_TTL = 120000; // 2 menit TTL
+  let packagesCacheTime = 0; // [OPT] Client-side package cache
+  const PACKAGES_CACHE_TTL = 300000; // 5 menit TTL — paket jarang berubah
   let autoRefreshInterval = null; // [OPT] Auto-refresh polling
   let draftSaveInterval = null; // [OPT] Draft auto-save
   let pendingPelunasanId = null; // [FIX] Deklarasi eksplisit
@@ -681,7 +683,18 @@
     const lp = document.getElementById("loginPage");
     const dp = document.getElementById("dashboardPage");
     lp.style.opacity = "0";
-    try { loadSettings(); } catch (e) { console.error("[setupDashboard] loadSettings:", e); }
+    // [PERF] loadSettings() dihapus dari sini — getDashboardBundle sudah memuat settings.
+    // Saat bundle gagal, fallback path di bawah tetap memanggil loadSettings().
+    // Optional: hydrate dari localStorage cache agar UI sidebar/title tidak "kosong" sejenak.
+    try {
+      const cachedRaw = localStorage.getItem("l_premium_settings_cache");
+      if (cachedRaw) {
+        const cachedSettings = JSON.parse(cachedRaw);
+        if (cachedSettings && Date.now() - (cachedSettings._ts || 0) < 3600000) {
+          applySettingsToUI(cachedSettings);
+        }
+      }
+    } catch (e) { /* ignore */ }
     setTimeout(() => {
       // [FIX] Reveal dashboard SEBELUM panggil fungsi lain — agar tidak blank
       // jika ada satu fungsi yang error
@@ -770,6 +783,7 @@
             const pkgData = bundle.packages;
             if (pkgData) {
               allPackages = pkgData;
+              packagesCacheTime = Date.now(); // [OPT] Catat waktu cache paket
               const sel = document.getElementById("selectPaket");
               if (sel) {
                 let selHtml = '<option value="" disabled selected>-- Pilih Layanan --</option>';
@@ -3754,10 +3768,35 @@ Terima kasih.`;
   }
 
   // 12. PENGATURAN PAKET LAYANAN (CRUD)
-  function fetchPaket() {
+  function fetchPaket(forceRefresh) {
+    // [OPT] Client-side cache — paket jarang berubah, skip GAS call jika data fresh.
+    // Tetap render dropdown + grid dari memory agar UI tetap reaktif.
+    const now = Date.now();
+    if (
+      !forceRefresh &&
+      allPackages &&
+      allPackages.length > 0 &&
+      now - packagesCacheTime < PACKAGES_CACHE_TTL
+    ) {
+      const sel = document.getElementById("selectPaket");
+      if (sel) {
+        let selHtml =
+          '<option value="" disabled selected>-- Pilih Layanan --</option>';
+        for (let i = 0; i < allPackages.length; i++) {
+          const p = allPackages[i];
+          if (p.status === "Nonaktif") continue;
+          const safeSat = escapeHTML(p.satuan || "Kg");
+          selHtml += `<option value="${escapeHTML(p.nama)}" data-id="${escapeHTML(p.id)}" data-harga="${p.harga}" data-satuan="${safeSat}" data-durasi="${escapeHTML(p.durasi || 0)}">${escapeHTML(p.nama)} (Rp ${parseInt(p.harga).toLocaleString("id-ID")} / ${safeSat})</option>`;
+        }
+        sel.innerHTML = selHtml;
+      }
+      renderPaketGrid(allPackages);
+      return;
+    }
     google.script.run
       .withSuccessHandler(function (data) {
         allPackages = data || [];
+        packagesCacheTime = Date.now();
         const sel = document.getElementById("selectPaket");
         if (!sel) return;
         // Hanya isi dropdown transaksi dengan layanan AKTIF
@@ -4043,7 +4082,7 @@ Terima kasih.`;
           if (res.success) {
             showToast("Layanan diperbarui!");
             cancelEditPaket();
-            fetchPaket();
+            fetchPaket(true); // [OPT] force refresh — invalidate cache setelah update
           } else {
             showToast("Gagal mengupdate!", "error");
           }
@@ -4062,7 +4101,7 @@ Terima kasih.`;
           if (res.success) {
             showToast("Layanan disimpan!");
             cancelEditPaket();
-            fetchPaket();
+            fetchPaket(true); // [OPT] force refresh — perlu ambil ID dari server
           } else {
             showToast("Gagal", "error");
           }
@@ -4816,7 +4855,15 @@ Terima kasih.`;
         if (res && res.success) {
           showToast(res.message);
           closeOpenShiftModal();
-          setupDashboard();
+          // [PERF] Hindari setupDashboard() yang men-trigger ulang seluruh
+          // dashboard bundle (~1-3s) + double-register listener/interval.
+          // Cukup update state shift + banner + refresh tab yang relevan.
+          if (res.data) {
+            currentShift = res.data;
+          } else {
+            currentShift = { id: null, waktu_mulai: new Date().toISOString(), modal_awal: parseInt(modalAwal) || 0 };
+          }
+          updateShiftBanner();
           // [SCOPE] Refresh Manajemen Kas jika user sedang di section itu
           // — scope berubah dari "none" → "shift" + reset visual pengeluaran
           const sectionKas = document.getElementById("section-kas");
