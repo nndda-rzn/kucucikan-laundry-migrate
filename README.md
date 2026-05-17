@@ -19,7 +19,7 @@ _Sistem kasir profesional dengan shift management, profiling instrumentation, da
 <br />
 
 [![Status](https://img.shields.io/badge/status-production_ready-success?style=flat-square)](#)
-[![Version](https://img.shields.io/badge/version-2.4-blue?style=flat-square)](#-changelog)
+[![Version](https://img.shields.io/badge/version-2.5-blue?style=flat-square)](#-changelog)
 [![Runtime](https://img.shields.io/badge/runtime-V8-orange?style=flat-square)](#)
 [![Timezone](https://img.shields.io/badge/timezone-Asia%2FJakarta-violet?style=flat-square)](#)
 [![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)](#-license)
@@ -130,11 +130,32 @@ tanpa biaya berlangganan bulanan, namun tetap menuntut akuntabilitas
 - Export laporan CSV / PDF (lazy-loaded)
 - **Manajemen Kas role-aware scope:**
   - Kasir + shift aktif → "Pengeluaran Shift Ini" (window waktu shift)
-  - Kasir tanpa shift → form disabled + banner peringatan
+  - Kasir tanpa shift → form disabled + banner peringatan + tooltip
   - Admin → "Pengeluaran Hari Ini" (lintas shift)
   - Tanggal lalu → read-only riwayat
 - Banner edukatif "Uang Awal Otomatis" dari shift aktif
 - Estimasi saldo real-time
+
+### Manajemen Shift Admin (v2.3+)
+- Section dedicated dengan tab Shift Aktif & Riwayat Shift
+- 3 stat cards real-time: Shift Aktif Saat Ini, Total Modal Beredar,
+  Penerimaan Live
+- **Search & filter** di tab Riwayat (cari nama kasir, filter status)
+- **Progressive disclosure** — card detail 2-layer:
+  - Layer 1 (default): total per metode + total pengeluaran
+  - Layer 2 ("Lihat Rincian Penuh"): DP/Pelunasan per metode +
+    breakdown kategori pengeluaran
+- Live monitoring per kasir dengan indicator pulse hijau
+- Force-close shift dengan modal konfirmasi + catatan wajib
+- 15-detik server cache + auto-invalidate
+
+### Aksesibilitas (a11y)
+- 9 modal dengan `role="dialog"` + `aria-modal` + `aria-labelledby`
+- Decorative icon di-mark `aria-hidden="true"` agar screen reader skip
+- WCAG AA contrast — semua label kecil pakai `text-slate-500`
+- `aria-disabled` + `cursor: not-allowed` + tooltip pada form disabled
+- Mobile bottom-nav dengan `aria-label` per tombol
+- Focus management saat modal open/close
 
 ### Administrasi
 - Manajemen pegawai (admin/kasir)
@@ -408,7 +429,8 @@ Executions) dan sample 1 dari 5 call ke sheet `perf_logs` untuk audit.
   parser GAS pecah saat menerima CRLF dalam inline `<script>`
 - **`.claspignore`** mengecualikan file debug & temp dari deployment
 - **Modular helpers** — `computeShiftSummary_()`, `getPackagePriceMap_()`,
-  dan `_perf()` dipakai lintas hot path
+  `_perf()`, `setBtnLoading()`, `renderListSkeleton()`, `applyKasScope()`
+  dipakai lintas hot path
 - **Migration scripts** — `setupDatabase()` idempoten dengan auto-add
   kolom baru tanpa data loss
 
@@ -678,6 +700,40 @@ Setelah `setupDatabase()` pertama kali dijalankan:
 ---
 
 ## Changelog
+
+### v2.5 — UX/A11y Polish _(2026-05)_
+**P0 — Accessibility & Critical UX**
+- 4 modal shift (open/close/force-close/summary) tambah `role="dialog"`
+  + `aria-modal="true"` + `aria-labelledby` + `aria-describedby`;
+  decorative icon di-mark `aria-hidden="true"`
+- Bulk replace 50 occurrence `text-slate-400` di label kecil
+  (`text-[9px]`/`text-[10px]`) → `text-slate-500` untuk WCAG AA
+  (kontras 3.06:1 → 4.6:1)
+- Form pengeluaran disabled state kini punya `cursor: not-allowed` +
+  `title` tooltip + `aria-disabled` saat scope `none` atau read-only
+- **Default landing role-aware**: kasir login → langsung section Transaksi
+  (80% workflow kasir di sini, hemat 1 klik); admin tetap Overview
+
+**P1 — Friction Reduction**
+- Tab Riwayat Shift admin tambah toolbar **search & filter**:
+  - Search nama kasir (live filter)
+  - Select status (Semua/Aktif/Selesai/Force-Closed)
+  - Counter "X dari Y shift" realtime
+  - Empty state dengan icon search untuk hasil kosong
+- **Progressive disclosure** card detail shift jadi 2-layer:
+  - Layer 1 default: total per metode (Tunai/QRIS/Transfer) + total
+    pengeluaran ringkas
+  - Layer 2 "Lihat Rincian Penuh" (collapsed): DP/Pelunasan per metode +
+    breakdown kategori pengeluaran
+  - Mengurangi visual overload dari 7 element → 4 element pada expand pertama
+  - Konsisten antara tab Aktif & Riwayat
+- **Loading state helpers terpadu**:
+  - `setBtnLoading(btn, loading, label)` — spinner SVG + `aria-busy` +
+    preserve original innerHTML via dataset (auto-restore tanpa state bug)
+  - `renderListSkeleton(target, count)` — skeleton card terstandar untuk
+    list views dengan `aria-busy` + `aria-hidden` pada decoratif
+  - Apply ke executeOpenShift, executeCloseShift, executeForceCloseShift,
+    loadShiftAdminTab, loadShiftRekap
 
 ### v2.4 — Role-Aware Cash Management _(2026-05)_
 - `getKasHarian` mengembalikan **scope** per request:
