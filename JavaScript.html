@@ -681,7 +681,13 @@
         console.error("[setupDashboard] header/sidebar error:", e);
       }
 
-      try { showSection("overview"); } catch (e) { console.error("[setupDashboard] showSection:", e); }
+      try {
+        // [UX P0-4] Default landing role-aware:
+        // - admin: section Overview (default lama, full visibility)
+        // - kasir: section Transaksi (80% waktu kasir di sini, hemat 1 klik)
+        const defaultSection = (currentUser && currentUser.role === "kasir") ? "transaksi" : "overview";
+        showSection(defaultSection);
+      } catch (e) { console.error("[setupDashboard] showSection:", e); }
       // [PERF] Hapus fetchCustomers() di sini — getDashboardBundle sudah memuat customers.
       // Tab Pelanggan akan render dari allCustomers saat user pertama kali buka tab itu.
 
@@ -1369,10 +1375,10 @@
                     <div class="flex flex-wrap md:flex-nowrap items-center justify-between md:justify-end gap-4 w-full md:w-auto mt-2 md:mt-0 pt-3 md:pt-0 border-t md:border-t-0 border-slate-100">
                         
                         <div class="text-left md:text-right flex-shrink-0">
-                            <p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest hidden md:block mb-0.5">Total ${totalTrx}x Order</p>
+                            <p class="text-[9px] font-bold text-slate-500 uppercase tracking-widest hidden md:block mb-0.5">Total ${totalTrx}x Order</p>
                             <div class="flex flex-col md:block">
                                 <span class="text-sm md:text-base font-black text-emerald-600 leading-none">Rp ${totalSpent.toLocaleString("id-ID")}</span>
-                                <span class="text-[9px] font-bold text-slate-400 block md:hidden mt-0.5">${totalTrx}x Order &bull; Terakhir: ${dateStr}</span>
+                                <span class="text-[9px] font-bold text-slate-500 block md:hidden mt-0.5">${totalTrx}x Order &bull; Terakhir: ${dateStr}</span>
                             </div>
                         </div>
 
@@ -1997,7 +2003,7 @@
                         <div class="flex-1 min-w-0">
                             <div class="flex flex-wrap items-center gap-2 mb-1">
                                 <h5 class="font-black text-slate-900 text-sm md:text-base leading-tight truncate">${escapeHTML(tr.customer)}</h5>
-                                <p class="text-[10px] font-bold text-slate-400 hidden sm:inline-block truncate px-2 py-0.5 bg-slate-50 rounded-md border border-slate-100">${!isNaN(d) ? d.toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" }) : "-"}</p>
+                                <p class="text-[10px] font-bold text-slate-500 hidden sm:inline-block truncate px-2 py-0.5 bg-slate-50 rounded-md border border-slate-100">${!isNaN(d) ? d.toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" }) : "-"}</p>
                             </div>
                             <div class="flex flex-wrap items-center gap-2">
                                 <span class="text-[10px] md:text-xs font-bold text-slate-500 truncate max-w-[180px] sm:max-w-md">${itemsStr}</span>
@@ -2012,7 +2018,7 @@
                         
                         <!-- Harga -->
                         <div class="text-left md:text-right flex-shrink-0">
-                            <p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest hidden md:block mb-0.5">Total Tagihan</p>
+                            <p class="text-[9px] font-bold text-slate-500 uppercase tracking-widest hidden md:block mb-0.5">Total Tagihan</p>
                             <span class="text-lg md:text-xl font-black text-blue-600 leading-none">Rp ${parseInt(tr.total).toLocaleString("id-ID")}</span>
                         </div>
 
@@ -2858,9 +2864,9 @@ Terima kasih.`;
     // Build confirm summary
     const subtotal = document.getElementById("textSubtotal").innerText;
     let summaryHtml = `
-            <div class="flex justify-between items-center py-3 px-4 border-b border-slate-100"><span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Pelanggan</span><span class="text-sm font-bold text-slate-800">${escapeHTML(cName)}</span></div>
-            <div class="flex justify-between items-center py-3 px-4 border-b border-slate-100"><span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">WhatsApp</span><span class="text-sm font-bold text-slate-800">${escapeHTML(wa) || "-"}</span></div>
-            <div class="px-4 py-3 border-b border-slate-100 bg-slate-50"><span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-2">Keranjang Layanan</span>`;
+            <div class="flex justify-between items-center py-3 px-4 border-b border-slate-100"><span class="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Pelanggan</span><span class="text-sm font-bold text-slate-800">${escapeHTML(cName)}</span></div>
+            <div class="flex justify-between items-center py-3 px-4 border-b border-slate-100"><span class="text-[10px] font-bold text-slate-500 uppercase tracking-wider">WhatsApp</span><span class="text-sm font-bold text-slate-800">${escapeHTML(wa) || "-"}</span></div>
+            <div class="px-4 py-3 border-b border-slate-100 bg-slate-50"><span class="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-2">Keranjang Layanan</span>`;
 
     currentCart.forEach((item) => {
       summaryHtml += `<div class="flex justify-between items-center py-1"><span class="text-xs font-semibold text-slate-700">${escapeHTML(item.paket)} (${item.berat} ${escapeHTML(item.satuan)})</span><span class="text-xs font-bold text-slate-800">Rp ${item.subtotal.toLocaleString("id-ID")}</span></div>`;
@@ -2873,13 +2879,13 @@ Terima kasih.`;
     if (terbayar > 0 && terbayar < parseInt(rawTotal)) {
       summaryHtml += `
             <div class="flex justify-between items-center py-3 px-4 border-b border-slate-100 bg-red-50"><span class="text-[10px] font-bold text-red-500 uppercase tracking-wider">Sisa Tagihan</span><span class="text-sm font-black text-red-600">Rp ${(parseInt(rawTotal) - terbayar).toLocaleString("id-ID")}</span></div>
-            <div class="flex justify-between items-center py-3 px-4 border-b border-slate-100"><span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Dibayar (DP)</span><span class="text-sm font-bold text-slate-800">Rp ${terbayar.toLocaleString("id-ID")}</span></div>`;
+            <div class="flex justify-between items-center py-3 px-4 border-b border-slate-100"><span class="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Dibayar (DP)</span><span class="text-sm font-bold text-slate-800">Rp ${terbayar.toLocaleString("id-ID")}</span></div>`;
     }
 
     summaryHtml += `
-            <div class="flex justify-between items-center py-3 px-4 border-b border-slate-100"><span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Metode Bayar</span><span class="text-sm font-bold text-slate-800">${escapeHTML(method)} (${escapeHTML(statusPay)})</span></div>`;
+            <div class="flex justify-between items-center py-3 px-4 border-b border-slate-100"><span class="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Metode Bayar</span><span class="text-sm font-bold text-slate-800">${escapeHTML(method)} (${escapeHTML(statusPay)})</span></div>`;
     if (catatan) {
-      summaryHtml += `<div class="flex justify-between items-start py-3 px-4"><span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider pt-0.5">Catatan</span><span class="text-sm font-semibold text-blue-600 text-right max-w-[60%]">${escapeHTML(catatan)}</span></div>`;
+      summaryHtml += `<div class="flex justify-between items-start py-3 px-4"><span class="text-[10px] font-bold text-slate-500 uppercase tracking-wider pt-0.5">Catatan</span><span class="text-sm font-semibold text-blue-600 text-right max-w-[60%]">${escapeHTML(catatan)}</span></div>`;
     }
 
     document.getElementById("confirmSummary").innerHTML = summaryHtml;
@@ -3636,7 +3642,7 @@ Terima kasih.`;
           payHtml += `<div>
                         <div class="flex justify-between items-center mb-1.5">
                             <span class="text-sm font-bold text-slate-700 flex items-center gap-2">${icon} ${escapeHTML(method)}</span>
-                            <div class="text-right"><span class="text-xs font-black text-slate-800">Rp ${val.toLocaleString("id-ID")}</span><span class="text-[10px] font-bold text-slate-400 ml-1.5">${pct}%</span></div>
+                            <div class="text-right"><span class="text-xs font-black text-slate-800">Rp ${val.toLocaleString("id-ID")}</span><span class="text-[10px] font-bold text-slate-500 ml-1.5">${pct}%</span></div>
                         </div>
                         <div class="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden"><div class="${color} h-full rounded-full transition-all duration-700" style="width: ${pct}%"></div></div>
                     </div>`;
@@ -3762,7 +3768,7 @@ Terima kasih.`;
       const pop = popCount[p.nama] || 0;
       const statusBadge = isAktif
         ? '<span class="text-[9px] font-black px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200">AKTIF</span>'
-        : '<span class="text-[9px] font-black px-2 py-0.5 rounded-full bg-slate-100 text-slate-400 border border-slate-200">NONAKTIF</span>';
+        : '<span class="text-[9px] font-black px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 border border-slate-200">NONAKTIF</span>';
       let katBadge = "";
       if (p.kategori) {
         if (!katMap[p.kategori]) {
@@ -3805,7 +3811,7 @@ Terima kasih.`;
                         
                         <!-- Harga -->
                         <div class="text-left md:text-right flex-shrink-0">
-                            <p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest hidden md:block mb-0.5">Tarif per ${safeSat}</p>
+                            <p class="text-[9px] font-bold text-slate-500 uppercase tracking-widest hidden md:block mb-0.5">Tarif per ${safeSat}</p>
                             <span class="text-lg md:text-xl font-black text-blue-600 leading-none">Rp ${parseInt(p.harga).toLocaleString("id-ID")}</span>
                         </div>
 
@@ -4480,18 +4486,42 @@ Terima kasih.`;
     const btnSave = document.getElementById("btnSavePengeluaran");
     const formInputs = [inputKet, inputKat, inputJumlah, btnSave];
 
+    // [A11Y] Helper: set form disabled state + visual cue (cursor + tooltip + aria)
+    const setFormDisabled = function (disabled, reason) {
+      if (formWrap) {
+        formWrap.classList.toggle("opacity-50", disabled);
+        formWrap.classList.toggle("pointer-events-none", disabled);
+        if (disabled) {
+          formWrap.setAttribute("aria-disabled", "true");
+          formWrap.title = reason || "";
+        } else {
+          formWrap.removeAttribute("aria-disabled");
+          formWrap.removeAttribute("title");
+        }
+      }
+      formInputs.forEach((el) => {
+        if (!el) return;
+        el.disabled = disabled;
+        if (disabled) {
+          el.style.cursor = "not-allowed";
+          if (reason) el.title = reason;
+        } else {
+          el.style.cursor = "";
+          el.removeAttribute("title");
+        }
+      });
+    };
+
     if (scope === "shift") {
       if (labelEl) labelEl.innerText = "Pengeluaran Shift Ini";
       if (hintEl) hintEl.innerText = "Tampilan: pengeluaran selama shift aktif Anda. Reset otomatis saat buka shift baru.";
       if (banner) banner.classList.add("hidden");
-      if (formWrap) formWrap.classList.remove("opacity-50", "pointer-events-none");
-      formInputs.forEach((el) => el && (el.disabled = false));
+      setFormDisabled(false);
     } else if (scope === "none") {
       if (labelEl) labelEl.innerText = "Pengeluaran Shift Ini";
       if (hintEl) hintEl.innerText = "Buka shift dulu untuk mulai mencatat pengeluaran.";
       if (banner) banner.classList.remove("hidden");
-      if (formWrap) formWrap.classList.add("opacity-50", "pointer-events-none");
-      formInputs.forEach((el) => el && (el.disabled = true));
+      setFormDisabled(true, "Buka shift dulu untuk mencatat pengeluaran. Klik tombol 'Buka Shift' di banner atas dashboard.");
     } else {
       // scope === "date"
       const isAdmin = currentUser && currentUser.role === "admin";
@@ -4503,10 +4533,11 @@ Terima kasih.`;
       }
       if (banner) banner.classList.add("hidden");
       // Admin selalu boleh catat; kasir di tanggal lalu read-only
-      const allowEdit = isAdmin;
-      if (formWrap) formWrap.classList.toggle("opacity-50", !allowEdit);
-      if (formWrap) formWrap.classList.toggle("pointer-events-none", !allowEdit);
-      formInputs.forEach((el) => el && (el.disabled = !allowEdit));
+      if (isAdmin) {
+        setFormDisabled(false);
+      } else {
+        setFormDisabled(true, "Mode riwayat — tidak bisa mencatat pengeluaran untuk tanggal lalu. Pilih hari ini untuk kembali mencatat.");
+      }
     }
   }
 
@@ -4794,7 +4825,7 @@ Terima kasih.`;
       <div class="flex justify-between items-center py-2 ${sub ? "" : "border-b border-slate-100"}">
         <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">${escapeHTML(label)}</span>
         <span class="text-sm font-black ${cls}">${escapeHTML(value)}</span>
-      </div>${sub ? `<p class="text-[10px] text-slate-400 -mt-1 mb-2 pl-1">${sub}</p>` : ""}`;
+      </div>${sub ? `<p class="text-[10px] text-slate-500 -mt-1 mb-2 pl-1">${sub}</p>` : ""}`;
 
     const subRow = (label, value, cls = "text-slate-600") => `
       <div class="flex justify-between items-center py-1 pl-3">
@@ -5074,7 +5105,7 @@ Terima kasih.`;
         </div>
         <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs pl-2">
           <div class="bg-slate-50 rounded-lg p-2">
-            <p class="text-[9px] font-bold text-slate-400 uppercase">Modal</p>
+            <p class="text-[9px] font-bold text-slate-500 uppercase">Modal</p>
             <p class="font-black text-slate-700 mt-0.5">${fmtRp(s.modal_awal)}</p>
           </div>
           <div class="bg-emerald-50 rounded-lg p-2">
@@ -5134,7 +5165,7 @@ Terima kasih.`;
               <span class="w-1 h-3 bg-red-500 rounded-full"></span>Pengeluaran per Kategori
             </p>
             <div class="bg-red-50/40 rounded-lg p-2 border border-red-100">
-              ${pengKategoriHtml || `<p class="text-[10px] text-slate-400 italic">Belum ada pengeluaran.</p>`}
+              ${pengKategoriHtml || `<p class="text-[10px] text-slate-500 italic">Belum ada pengeluaran.</p>`}
               <div class="flex justify-between items-center pt-1.5 mt-1.5 border-t border-dashed border-red-200">
                 <span class="text-[10px] font-bold text-red-600 uppercase">Total</span>
                 <span class="text-xs font-black text-red-700">${fmtRp(sm.totalPengeluaran || 0)}</span>
@@ -5386,7 +5417,7 @@ Terima kasih.`;
         </div>
         <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
           <div class="bg-slate-50 rounded-lg p-2">
-            <p class="text-[9px] font-bold text-slate-400 uppercase">Modal</p>
+            <p class="text-[9px] font-bold text-slate-500 uppercase">Modal</p>
             <p class="font-black text-slate-700 mt-0.5">${fmtRp(summary.modalAwal)}</p>
           </div>
           <div class="bg-emerald-50 rounded-lg p-2">

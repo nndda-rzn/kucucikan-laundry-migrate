@@ -107,16 +107,20 @@
     <div
       id="openShiftModal"
       class="fixed inset-0 bg-slate-900/60 z-[170] hidden items-center justify-center backdrop-blur-sm transition-all p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="openShiftTitle"
+      aria-describedby="openShiftDesc"
     >
       <div
         class="bg-white p-6 md:p-8 rounded-[2rem] shadow-2xl w-[90%] max-w-sm transform scale-95 transition-transform duration-300"
         id="openShiftModalContent"
       >
-        <div class="w-16 h-16 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-5 shadow-inner">
+        <div class="w-16 h-16 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-5 shadow-inner" aria-hidden="true">
           <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
         </div>
-        <h3 class="text-xl font-black text-center text-slate-900 mb-2 tracking-tight">Mulai Shift</h3>
-        <p class="text-sm text-center text-slate-500 mb-6 leading-relaxed">Masukkan modal awal uang di laci (kas awal).</p>
+        <h3 id="openShiftTitle" class="text-xl font-black text-center text-slate-900 mb-2 tracking-tight">Mulai Shift</h3>
+        <p id="openShiftDesc" class="text-sm text-center text-slate-500 mb-6 leading-relaxed">Masukkan modal awal uang di laci (kas awal).</p>
         
         <div class="mb-6">
           <label class="block text-[10px] font-bold text-slate-500 mb-1.5 uppercase tracking-wider ml-1">Modal Awal (Rp)</label>
@@ -134,16 +138,20 @@
     <div
       id="closeShiftModal"
       class="fixed inset-0 bg-slate-900/60 z-[170] hidden items-center justify-center backdrop-blur-sm transition-all p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="closeShiftTitle"
+      aria-describedby="closeShiftDesc"
     >
       <div
         class="bg-white p-6 md:p-8 rounded-[2rem] shadow-2xl w-[90%] max-w-sm transform scale-95 transition-transform duration-300"
         id="closeShiftModalContent"
       >
-        <div class="w-16 h-16 bg-red-50 text-red-500 rounded-full flex items-center justify-center mx-auto mb-5 shadow-inner">
+        <div class="w-16 h-16 bg-red-50 text-red-500 rounded-full flex items-center justify-center mx-auto mb-5 shadow-inner" aria-hidden="true">
           <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
         </div>
-        <h3 class="text-xl font-black text-center text-slate-900 mb-2 tracking-tight">Tutup Shift</h3>
-        <p class="text-sm text-center text-slate-500 mb-6 leading-relaxed">Pastikan semua transaksi telah selesai sebelum menutup shift.</p>
+        <h3 id="closeShiftTitle" class="text-xl font-black text-center text-slate-900 mb-2 tracking-tight">Tutup Shift</h3>
+        <p id="closeShiftDesc" class="text-sm text-center text-slate-500 mb-6 leading-relaxed">Pastikan semua transaksi telah selesai sebelum menutup shift.</p>
         
         <div class="mb-6">
           <label class="block text-[10px] font-bold text-slate-500 mb-1.5 uppercase tracking-wider ml-1">Catatan Penutupan (Opsional)</label>
@@ -161,16 +169,20 @@
     <div
       id="shiftSummaryModal"
       class="fixed inset-0 bg-slate-900/60 z-[180] hidden items-center justify-center backdrop-blur-sm transition-all p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="shiftSummaryTitle"
+      aria-describedby="shiftSummaryDesc"
     >
       <div
         id="shiftSummaryContent"
         class="bg-white p-6 md:p-7 rounded-[2rem] shadow-2xl w-[92%] max-w-md transform scale-95 transition-transform duration-300 max-h-[90vh] overflow-y-auto custom-scrollbar"
       >
-        <div class="w-14 h-14 bg-emerald-50 text-emerald-500 rounded-full flex items-center justify-center mx-auto mb-4">
+        <div class="w-14 h-14 bg-emerald-50 text-emerald-500 rounded-full flex items-center justify-center mx-auto mb-4" aria-hidden="true">
           <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
         </div>
-        <h3 class="text-xl font-black text-center text-slate-900 mb-1">Shift Selesai</h3>
-        <p class="text-xs text-center text-slate-500 mb-5">Rincian kas & pembukuan selama shift Anda.</p>
+        <h3 id="shiftSummaryTitle" class="text-xl font-black text-center text-slate-900 mb-1">Shift Selesai</h3>
+        <p id="shiftSummaryDesc" class="text-xs text-center text-slate-500 mb-5">Rincian kas & pembukuan selama shift Anda.</p>
         <div class="space-y-1 mb-5" id="shiftSummaryRows"></div>
         <button onclick="closeShiftSummaryModal()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl shadow-md transition-all active:scale-95 text-sm sticky bottom-0">Selesai</button>
       </div>
@@ -377,7 +389,7 @@
 
           <div>
             <label
-              class="text-[10px] font-bold text-slate-400 ml-1 uppercase mb-1.5 block"
+              class="text-[10px] font-bold text-slate-500 ml-1 uppercase mb-1.5 block"
               >Metode Pembayaran</label
             >
             <select
@@ -407,7 +419,7 @@
                 >
               </div>
               <label
-                class="text-[10px] font-bold text-slate-400 ml-1 uppercase mb-1.5 block"
+                class="text-[10px] font-bold text-slate-500 ml-1 uppercase mb-1.5 block"
                 >Uang Diterima (Rp)</label
               >
               <input
@@ -715,7 +727,7 @@
           </button>
           <p
             id="btnSendWAHint"
-            class="hidden text-center text-[10px] text-slate-400 font-medium py-1"
+            class="hidden text-center text-[10px] text-slate-500 font-medium py-1"
           >
             Nomor WhatsApp tidak tersedia untuk pelanggan ini.
           </p>
@@ -1220,7 +1232,7 @@
             <div class="flex items-center gap-3 px-3 mb-3">
               <div class="h-px bg-slate-200 flex-1"></div>
               <p
-                class="text-[10px] font-black text-slate-400 uppercase tracking-widest"
+                class="text-[10px] font-black text-slate-500 uppercase tracking-widest"
               >
                 Admin
               </p>
@@ -1399,7 +1411,7 @@
                 class="w-2 h-2 md:w-2.5 md:h-2.5 bg-emerald-500 rounded-full animate-pulse shadow-sm flex-shrink-0"
               ></div>
               <p
-                class="text-[9px] md:text-[10px] font-bold text-slate-400 uppercase tracking-widest truncate"
+                class="text-[9px] md:text-[10px] font-bold text-slate-500 uppercase tracking-widest truncate"
                 id="dateDisplay"
               ></p>
             </div>
@@ -1444,7 +1456,7 @@
             <div class="flex items-center gap-2">
               <p
                 id="lastRefresh"
-                class="text-[9px] font-bold text-slate-400 uppercase tracking-widest"
+                class="text-[9px] font-bold text-slate-500 uppercase tracking-widest"
               ></p>
               <button
                 onclick="loadTransactions(true)"
@@ -1716,14 +1728,14 @@
         </div>
 
         <!-- [SHIFT] Modal: Force Close Shift (Admin) -->
-        <div id="forceCloseShiftModal" class="fixed inset-0 z-[120] hidden items-center justify-center bg-slate-900/50 backdrop-blur-sm">
+        <div id="forceCloseShiftModal" class="fixed inset-0 z-[120] hidden items-center justify-center bg-slate-900/50 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="forceCloseShiftTitle" aria-describedby="forceCloseShiftInfo">
           <div id="forceCloseShiftModalContent" class="bg-white w-[92%] max-w-md rounded-3xl p-7 shadow-2xl scale-95 transition-transform">
             <div class="flex items-start gap-4 mb-5">
-              <div class="w-12 h-12 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center flex-shrink-0">
+              <div class="w-12 h-12 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center flex-shrink-0" aria-hidden="true">
                 <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
               </div>
               <div class="flex-1">
-                <h3 class="text-lg font-black text-slate-900 mb-1">Force Close Shift</h3>
+                <h3 id="forceCloseShiftTitle" class="text-lg font-black text-slate-900 mb-1">Force Close Shift</h3>
                 <p class="text-xs text-slate-500" id="forceCloseShiftInfo">Detail shift akan ditampilkan di sini.</p>
               </div>
             </div>
@@ -1782,12 +1794,12 @@
                  </h4>
                  <div class="space-y-4">
                    <div>
-                     <label class="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1 mb-1 block">Keterangan</label>
+                     <label class="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1 mb-1 block">Keterangan</label>
                      <input type="text" id="inputPengeluaranKet" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none text-sm font-semibold text-slate-700" placeholder="Contoh: Beli detergen, Bayar listrik" />
                    </div>
                    <div class="grid grid-cols-2 gap-3">
                      <div class="col-span-2 sm:col-span-1">
-                       <label class="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1 mb-1 block">Kategori</label>
+                       <label class="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1 mb-1 block">Kategori</label>
                        <select id="inputPengeluaranKat" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none text-sm font-semibold text-slate-700 appearance-none">
                          <option value="Bahan Baku">Bahan Baku</option>
                          <option value="Operasional">Operasional</option>
@@ -1795,7 +1807,7 @@
                        </select>
                      </div>
                      <div class="col-span-2 sm:col-span-1">
-                       <label class="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1 mb-1 block">Jumlah (Rp)</label>
+                       <label class="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1 mb-1 block">Jumlah (Rp)</label>
                        <input type="number" id="inputPengeluaranJumlah" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none text-sm font-black text-red-600" placeholder="0" />
                      </div>
                    </div>
@@ -1829,11 +1841,11 @@
                    <table class="w-full text-left border-collapse">
                      <thead>
                        <tr class="border-b-2 border-slate-100">
-                         <th class="py-3 px-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Waktu</th>
-                         <th class="py-3 px-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Keterangan</th>
-                         <th class="py-3 px-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Kategori</th>
-                         <th class="py-3 px-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-right">Jumlah</th>
-                         <th class="py-3 px-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-center">Aksi</th>
+                         <th class="py-3 px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Waktu</th>
+                         <th class="py-3 px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Keterangan</th>
+                         <th class="py-3 px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Kategori</th>
+                         <th class="py-3 px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest text-right">Jumlah</th>
+                         <th class="py-3 px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest text-center">Aksi</th>
                        </tr>
                      </thead>
                      <tbody id="listPengeluaran" class="text-sm">
@@ -2197,7 +2209,7 @@
                       ><span>Rp <span id="textSubtotal">0</span></span>
                     </div>
                     <p
-                      class="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-1"
+                      class="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-1"
                     >
                       Total Tagihan
                     </p>
@@ -2528,7 +2540,7 @@
                   class="flex items-center bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl px-3 py-2 flex-1 md:flex-none transition-all focus-within:bg-white focus-within:ring-2 focus-within:ring-blue-500/20 focus-within:border-blue-500"
                 >
                   <span
-                    class="text-[9px] font-black text-slate-400 uppercase tracking-widest mr-2"
+                    class="text-[9px] font-black text-slate-500 uppercase tracking-widest mr-2"
                     >DARI</span
                   >
                   <input
@@ -2540,7 +2552,7 @@
                   />
                   <span class="text-slate-300 mx-1.5 sm:mx-2">–</span>
                   <span
-                    class="text-[9px] font-black text-slate-400 uppercase tracking-widest mr-2"
+                    class="text-[9px] font-black text-slate-500 uppercase tracking-widest mr-2"
                     >S/D</span
                   >
                   <input
@@ -3092,7 +3104,7 @@
                       Format Nota
                     </h3>
                     <p
-                      class="text-[10px] font-bold text-slate-400 uppercase tracking-wider"
+                      class="text-[10px] font-bold text-slate-500 uppercase tracking-wider"
                     >
                       Identitas Struk Cetak
                     </p>
@@ -3102,7 +3114,7 @@
                   <div class="flex gap-4">
                     <div class="flex-1">
                       <label
-                        class="text-[10px] font-black text-slate-400 ml-1 uppercase tracking-wider mb-1.5 block"
+                        class="text-[10px] font-black text-slate-500 ml-1 uppercase tracking-wider mb-1.5 block"
                         >Nama Aplikasi</label
                       >
                       <input
@@ -3117,7 +3129,7 @@
                     </div>
                     <div class="flex-1">
                       <label
-                        class="text-[10px] font-black text-slate-400 ml-1 uppercase tracking-wider mb-1.5 block"
+                        class="text-[10px] font-black text-slate-500 ml-1 uppercase tracking-wider mb-1.5 block"
                         >URL Logo (Opsional)</label
                       >
                       <input
@@ -3152,7 +3164,7 @@
                   </div>
                   <div>
                     <label
-                      class="text-[10px] font-black text-slate-400 ml-1 uppercase tracking-wider mb-1.5 block"
+                      class="text-[10px] font-black text-slate-500 ml-1 uppercase tracking-wider mb-1.5 block"
                       >Nama Toko (Nota)</label
                     >
                     <input
@@ -3164,7 +3176,7 @@
                   </div>
                   <div>
                     <label
-                      class="text-[10px] font-black text-slate-400 ml-1 uppercase tracking-wider mb-1.5 block"
+                      class="text-[10px] font-black text-slate-500 ml-1 uppercase tracking-wider mb-1.5 block"
                       >Slogan</label
                     >
                     <input
@@ -3176,7 +3188,7 @@
                   </div>
                   <div>
                     <label
-                      class="text-[10px] font-black text-slate-400 ml-1 uppercase tracking-wider mb-1.5 block"
+                      class="text-[10px] font-black text-slate-500 ml-1 uppercase tracking-wider mb-1.5 block"
                       >Pesan Footer</label
                     >
                     <textarea
@@ -3188,7 +3200,7 @@
                   </div>
                   <div class="border-t border-slate-100 pt-5 mt-2">
                     <label
-                      class="text-[10px] font-black text-slate-400 ml-1 uppercase tracking-wider mb-0.5 block flex justify-between"
+                      class="text-[10px] font-black text-slate-500 ml-1 uppercase tracking-wider mb-0.5 block flex justify-between"
                       >Tata Tertib
                       <span class="text-slate-300 normal-case font-medium"
                         >(Opsional)</span
@@ -3245,7 +3257,7 @@
                       Rekening Bank
                     </h3>
                     <p
-                      class="text-[10px] font-bold text-slate-400 uppercase tracking-wider"
+                      class="text-[10px] font-bold text-slate-500 uppercase tracking-wider"
                     >
                       Info Transfer QRIS
                     </p>
@@ -3254,7 +3266,7 @@
                 <div class="space-y-4 relative z-10">
                   <div>
                     <label
-                      class="text-[10px] font-black text-slate-400 ml-1 uppercase tracking-wider mb-1.5 block"
+                      class="text-[10px] font-black text-slate-500 ml-1 uppercase tracking-wider mb-1.5 block"
                       >Nama Bank</label
                     >
                     <input
@@ -3267,7 +3279,7 @@
                   </div>
                   <div>
                     <label
-                      class="text-[10px] font-black text-slate-400 ml-1 uppercase tracking-wider mb-1.5 block"
+                      class="text-[10px] font-black text-slate-500 ml-1 uppercase tracking-wider mb-1.5 block"
                       >Nomor Rekening</label
                     >
                     <input
@@ -3279,7 +3291,7 @@
                   </div>
                   <div>
                     <label
-                      class="text-[10px] font-black text-slate-400 ml-1 uppercase tracking-wider mb-1.5 block"
+                      class="text-[10px] font-black text-slate-500 ml-1 uppercase tracking-wider mb-1.5 block"
                       >Atas Nama (A.N)</label
                     >
                     <input
@@ -3356,7 +3368,7 @@
                       Template WhatsApp
                     </h3>
                     <p
-                      class="text-[10px] font-bold text-slate-400 uppercase tracking-wider"
+                      class="text-[10px] font-bold text-slate-500 uppercase tracking-wider"
                     >
                       Dikirim otomatis via WA
                     </p>
@@ -3512,12 +3524,12 @@
                   <!-- Editor -->
                   <div class="flex justify-between items-center mb-1.5">
                     <label
-                      class="text-[10px] font-black text-slate-400 ml-1 uppercase tracking-wider"
+                      class="text-[10px] font-black text-slate-500 ml-1 uppercase tracking-wider"
                       >Editor Pesan</label
                     >
                     <button
                       onclick="resetWaTemplate()"
-                      class="text-[9px] font-bold text-slate-400 hover:text-red-500 bg-white hover:bg-red-50 px-3 py-1.5 rounded-lg border border-transparent hover:border-red-100 transition-colors flex items-center gap-1.5"
+                      class="text-[9px] font-bold text-slate-500 hover:text-red-500 bg-white hover:bg-red-50 px-3 py-1.5 rounded-lg border border-transparent hover:border-red-100 transition-colors flex items-center gap-1.5"
                     >
                       <svg
                         class="w-3 h-3"
@@ -3547,7 +3559,7 @@
 
                   <!-- WhatsApp Preview UI -->
                   <label
-                    class="text-[10px] font-black text-slate-400 ml-1 uppercase tracking-wider mb-2 block"
+                    class="text-[10px] font-black text-slate-500 ml-1 uppercase tracking-wider mb-2 block"
                     >Preview Tampilan di WhatsApp</label
                   >
                   <div
@@ -3585,7 +3597,7 @@ Teks preview muncul di sini...</pre
                       <div
                         class="flex justify-end items-center gap-1 mt-1.5 -mb-1"
                       >
-                        <span class="text-[9px] text-slate-400">12:00</span>
+                        <span class="text-[9px] text-slate-500">12:00</span>
                         <svg
                           class="w-4 h-4 text-[#53bdeb]"
                           viewBox="0 0 24 24"
