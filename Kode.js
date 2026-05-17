@@ -1382,11 +1382,84 @@ function getKasHarian(token, tanggalStr) {
       }
     }
 
+    // 3. Hitung Total Penerimaan sesuai scope
+    //   "shift" → pakai computeShiftSummary_ (akurat per window shift, sudah include pelunasan attribution)
+    //   "date"  → scan sheet transactions, agregat DP (kolom 19) yang dibuat pada tanggal + pelunasan (kolom 20) yang dibayar pada tanggal
+    //   "none"  → tetap 0
+    let penerimaanData = { total: 0, tunai: 0, nonTunai: 0, dp: 0, pelunasan: 0 };
+
+    if (scope === "shift" && activeShift) {
+      const shiftSummary = computeShiftSummary_(activeShift.id, parseInt(activeShift.modal_awal) || 0);
+      penerimaanData.tunai = shiftSummary.totalTunai || 0;
+      penerimaanData.nonTunai = shiftSummary.totalNonTunai || 0;
+      penerimaanData.dp = shiftSummary.totalDp || 0;
+      penerimaanData.pelunasan = shiftSummary.totalPelunasan || 0;
+      penerimaanData.total = penerimaanData.tunai + penerimaanData.nonTunai;
+    } else if (scope === "date") {
+      // Hitung penerimaan harian dari sheet transactions (lintas shift)
+      const sheetTrx = getSheet("transactions");
+      const lastRowTrx = sheetTrx.getLastRow();
+      if (lastRowTrx > 1) {
+        // [PERF] Range-bounded — 1000 transaksi terakhir cukup untuk filter 1 hari
+        const trxRowCount = Math.min(1000, lastRowTrx - 1);
+        const trxStartRow = lastRowTrx - trxRowCount + 1;
+        const dataTrx = sheetTrx.getRange(trxStartRow, 1, trxRowCount, 23).getValues();
+
+        const isMetodeTunai = function (raw) {
+          const m = String(raw || "").toLowerCase();
+          return m.indexOf("tunai") !== -1 || m.indexOf("cash") !== -1;
+        };
+
+        for (let i = 0; i < dataTrx.length; i++) {
+          const r = dataTrx[i];
+          if (!r[0]) continue;
+
+          const dp = parseInt(r[19]) || 0;
+          const pelunasan = parseInt(r[20]) || 0;
+          const metodeUtama = String(r[11] || "Tunai");
+          const metodePelunasan = String(r[13] || "");
+
+          // DP tercatat pada tanggal transaksi dibuat (kolom 1 = tanggal)
+          if (dp > 0) {
+            const tglTrx = r[1] ? new Date(r[1]) : null;
+            if (tglTrx && !isNaN(tglTrx)) {
+              tglTrx.setHours(0, 0, 0, 0);
+              if (tglTrx.getTime() === targetDate.getTime()) {
+                penerimaanData.dp += dp;
+                if (isMetodeTunai(metodeUtama)) penerimaanData.tunai += dp;
+                else penerimaanData.nonTunai += dp;
+              }
+            }
+          }
+
+          // Pelunasan tercatat pada tanggal_pelunasan (kolom 18)
+          if (pelunasan > 0) {
+            const tglLunas = r[18] ? new Date(r[18]) : null;
+            if (tglLunas && !isNaN(tglLunas)) {
+              tglLunas.setHours(0, 0, 0, 0);
+              if (tglLunas.getTime() === targetDate.getTime()) {
+                penerimaanData.pelunasan += pelunasan;
+                const metodeP = metodePelunasan || metodeUtama;
+                if (isMetodeTunai(metodeP)) penerimaanData.tunai += pelunasan;
+                else penerimaanData.nonTunai += pelunasan;
+              }
+            }
+          }
+        }
+        penerimaanData.total = penerimaanData.tunai + penerimaanData.nonTunai;
+      }
+    }
+
     return {
       success: true,
       uang_awal: uangAwal,
       pengeluaran: pengeluaranList,
       total_pengeluaran: totalPengeluaran,
+      total_penerimaan: penerimaanData.total,
+      penerimaan_tunai: penerimaanData.tunai,
+      penerimaan_non_tunai: penerimaanData.nonTunai,
+      penerimaan_dp: penerimaanData.dp,
+      penerimaan_pelunasan: penerimaanData.pelunasan,
       scope: scope,                 // "shift" | "date" | "none"
       requires_shift: requiresShift, // true jika kasir hari ini perlu buka shift dulu
       active_shift_id: activeShift ? activeShift.id : null,

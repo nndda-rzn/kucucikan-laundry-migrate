@@ -2291,6 +2291,7 @@
           closePaymentModal();
           updateOverviewStats();
           loadTransactions(true);
+          refreshKasIfVisible();
           if (tx && tx.whatsapp && tx.whatsapp.toString().trim() !== "")
             showWaModal(tx, "DIAMBIL (LUNAS)");
         } else {
@@ -2988,6 +2989,7 @@ Terima kasih.`;
           // [Pendekatan 1: Silent Re-fetching] Refresh data secara background
           loadTransactions(true);
           fetchCustomers();
+          refreshKasIfVisible();
 
           // Ubah redirect setelah tutup nota ke 'history' agar auto-refresh terlihat jelas
           notaOpenedFrom = "history";
@@ -4489,6 +4491,17 @@ Terima kasih.`;
   // 19. MANAJEMEN KAS HARIAN
   // ==========================================
 
+  // [PENERIMAAN] Helper: refresh section Kas hanya jika sedang aktif.
+  // Dipanggil setelah createTransaction & lunasDanAmbil agar card Total
+  // Penerimaan + Daftar Pengeluaran (jika scope kasir) tetap sinkron tanpa
+  // refresh manual.
+  function refreshKasIfVisible() {
+    const sectionKas = document.getElementById("section-kas");
+    if (sectionKas && !sectionKas.classList.contains("hidden")) {
+      try { fetchKasHarian(); } catch (e) { /* swallow */ }
+    }
+  }
+
   function fetchKasHarian() {
     const filterInput = document.getElementById("kasDateFilter");
     const dateStr = filterInput ? filterInput.value : "";
@@ -4502,6 +4515,13 @@ Terima kasih.`;
           // Update cards
           document.getElementById("kasUangAwal").innerText = "Rp " + res.uang_awal.toLocaleString("id-ID");
           document.getElementById("kasTotalPengeluaran").innerText = "Rp " + res.total_pengeluaran.toLocaleString("id-ID");
+
+          // [PENERIMAAN] Render card Total Penerimaan dengan data scope-aware dari backend
+          const elPenerimaan = document.getElementById("kasPenerimaan");
+          if (elPenerimaan) {
+            const total = parseInt(res.total_penerimaan) || 0;
+            elPenerimaan.innerText = "Rp " + total.toLocaleString("id-ID");
+          }
 
           // [SCOPE] Update label & banner sesuai scope dari backend
           applyKasScope(res);
@@ -4533,6 +4553,30 @@ Terima kasih.`;
     const inputJumlah = document.getElementById("inputPengeluaranJumlah");
     const btnSave = document.getElementById("btnSavePengeluaran");
     const formInputs = [inputKet, inputKat, inputJumlah, btnSave];
+
+    // [PENERIMAAN] Update label & subtitle card Total Penerimaan
+    const penerimaanLabelEl = document.getElementById("kasPenerimaanLabel");
+    const penerimaanSubEl = document.getElementById("kasPenerimaanSubtitle");
+    const fmtRp = (n) => "Rp " + (parseInt(n) || 0).toLocaleString("id-ID");
+    if (penerimaanLabelEl) {
+      if (scope === "shift") {
+        penerimaanLabelEl.innerText = "Penerimaan Shift Ini";
+      } else if (scope === "none") {
+        penerimaanLabelEl.innerText = "Penerimaan Shift Ini";
+      } else {
+        const isAdmin = currentUser && currentUser.role === "admin";
+        penerimaanLabelEl.innerText = isAdmin ? "Penerimaan Hari Ini" : "Penerimaan Hari Ini (Riwayat)";
+      }
+    }
+    if (penerimaanSubEl) {
+      const tunai = parseInt(res.penerimaan_tunai) || 0;
+      const nonTunai = parseInt(res.penerimaan_non_tunai) || 0;
+      if (tunai > 0 || nonTunai > 0) {
+        penerimaanSubEl.innerText = `Tunai ${fmtRp(tunai)} • Non-Tunai ${fmtRp(nonTunai)}`;
+      } else {
+        penerimaanSubEl.innerText = "Tunai + Non-Tunai (DP & Pelunasan)";
+      }
+    }
 
     // [A11Y] Helper: set form disabled state + visual cue (cursor + tooltip + aria)
     const setFormDisabled = function (disabled, reason) {
