@@ -4448,11 +4448,10 @@ Terima kasih.`;
           // Update cards
           document.getElementById("kasUangAwal").innerText = "Rp " + res.uang_awal.toLocaleString("id-ID");
           document.getElementById("kasTotalPengeluaran").innerText = "Rp " + res.total_pengeluaran.toLocaleString("id-ID");
-          
-          // Estimasi penerimaan (kita ambil dari currentReportData jika ada, atau 0 untuk fallback)
-          // Secara ideal kita butuh hitung dari transaksi hari ini, tapi karena ini UI kas, kita akan fetch terpisah jika perlu.
-          // Untuk saat ini, mari kita biarkan kasPenerimaan kosong atau diisi oleh update dashboard.
-          
+
+          // [SCOPE] Update label & banner sesuai scope dari backend
+          applyKasScope(res);
+
           renderPengeluaranList(res.pengeluaran);
         } else {
           showToast(res ? res.message : "Gagal mengambil data kas.", "error");
@@ -4463,6 +4462,52 @@ Terima kasih.`;
         showToast("Error koneksi: " + err.message, "error");
       })
       .getKasHarian(currentUser.token, dateStr);
+  }
+
+  // [SCOPE] Sesuaikan UI Manajemen Kas berdasarkan scope dari getKasHarian:
+  //   "shift" → kasir aktif hari ini, tampilkan label "Pengeluaran Shift Ini"
+  //   "date"  → admin atau filter tanggal mundur, tampilkan label "Pengeluaran Hari Ini"
+  //   "none"  → kasir hari ini tanpa shift aktif, banner peringatan + form disabled
+  function applyKasScope(res) {
+    const scope = res.scope || "date";
+    const labelEl = document.getElementById("kasTotalPengeluaranLabel");
+    const hintEl = document.getElementById("kasScopeHint");
+    const banner = document.getElementById("kasNoShiftBanner");
+    const formWrap = document.getElementById("kasFormPengeluaran");
+    const inputKet = document.getElementById("inputPengeluaranKet");
+    const inputKat = document.getElementById("inputPengeluaranKat");
+    const inputJumlah = document.getElementById("inputPengeluaranJumlah");
+    const btnSave = document.getElementById("btnSavePengeluaran");
+    const formInputs = [inputKet, inputKat, inputJumlah, btnSave];
+
+    if (scope === "shift") {
+      if (labelEl) labelEl.innerText = "Pengeluaran Shift Ini";
+      if (hintEl) hintEl.innerText = "Tampilan: pengeluaran selama shift aktif Anda. Reset otomatis saat buka shift baru.";
+      if (banner) banner.classList.add("hidden");
+      if (formWrap) formWrap.classList.remove("opacity-50", "pointer-events-none");
+      formInputs.forEach((el) => el && (el.disabled = false));
+    } else if (scope === "none") {
+      if (labelEl) labelEl.innerText = "Pengeluaran Shift Ini";
+      if (hintEl) hintEl.innerText = "Buka shift dulu untuk mulai mencatat pengeluaran.";
+      if (banner) banner.classList.remove("hidden");
+      if (formWrap) formWrap.classList.add("opacity-50", "pointer-events-none");
+      formInputs.forEach((el) => el && (el.disabled = true));
+    } else {
+      // scope === "date"
+      const isAdmin = currentUser && currentUser.role === "admin";
+      if (labelEl) labelEl.innerText = isAdmin ? "Pengeluaran Hari Ini" : "Pengeluaran Hari Ini (Riwayat)";
+      if (hintEl) {
+        hintEl.innerText = isAdmin
+          ? "Tampilan: semua pengeluaran pada tanggal terpilih (lintas shift kasir)."
+          : "Tampilan riwayat tanggal lalu (read-only).";
+      }
+      if (banner) banner.classList.add("hidden");
+      // Admin selalu boleh catat; kasir di tanggal lalu read-only
+      const allowEdit = isAdmin;
+      if (formWrap) formWrap.classList.toggle("opacity-50", !allowEdit);
+      if (formWrap) formWrap.classList.toggle("pointer-events-none", !allowEdit);
+      formInputs.forEach((el) => el && (el.disabled = !allowEdit));
+    }
   }
 
   function submitUangAwal() {
@@ -4637,7 +4682,13 @@ Terima kasih.`;
         if (res && res.success) {
           showToast(res.message);
           closeOpenShiftModal();
-          setupDashboard(); 
+          setupDashboard();
+          // [SCOPE] Refresh Manajemen Kas jika user sedang di section itu
+          // — scope berubah dari "none" → "shift" + reset visual pengeluaran
+          const sectionKas = document.getElementById("section-kas");
+          if (sectionKas && !sectionKas.classList.contains("hidden")) {
+            fetchKasHarian();
+          }
         } else {
           showToast(res ? res.message : "Gagal membuka shift", "error");
         }
@@ -4685,6 +4736,13 @@ Terima kasih.`;
           closeCloseShiftModal();
           currentShift = null;
           updateShiftBanner();
+
+          // [SCOPE] Refresh Manajemen Kas jika user sedang di section itu —
+          // scope berubah dari "shift" → "none", form akan disabled + banner muncul
+          const sectionKas = document.getElementById("section-kas");
+          if (sectionKas && !sectionKas.classList.contains("hidden")) {
+            fetchKasHarian();
+          }
 
           if (res.summary) {
             // [SHIFT] Tampilkan modal rekap detail (saldo akhir, pengeluaran, dll.)

@@ -1240,12 +1240,38 @@ function getKasHarian(token, tanggalStr) {
     // [OPT] Hapus setupKasSheet_() — sheet sudah dibuat saat setupDatabase(), tidak perlu cek ulang di setiap read
     const targetDate = tanggalStr ? new Date(tanggalStr) : new Date();
     targetDate.setHours(0, 0, 0, 0);
-    
+
+    // [SCOPE] Tentukan scope query pengeluaran:
+    //  - "shift": kasir dengan shift aktif & filter = hari ini → tampilkan hanya
+    //    pengeluaran dalam window shift aktif (mulai → now). Konsisten dengan
+    //    rekap shift summary, dan reset visual saat buka shift baru.
+    //  - "date": admin, atau filter tanggal mundur, atau kasir tanpa shift aktif
+    //    pada hari ini → tampilkan semua pengeluaran tanggal itu (lintas shift).
+    //  - "none": kasir hari ini tanpa shift aktif → kosong + flag UI minta buka shift.
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const isToday = targetDate.getTime() === today.getTime();
+    const isAdmin = session.role === "admin";
+
+    let activeShift = null;
+    if (!isAdmin) {
+      activeShift = getActiveShift_(session.username);
+    }
+
+    let scope = "date";
+    let requiresShift = false;
+    if (!isAdmin && isToday) {
+      if (activeShift) {
+        scope = "shift";
+      } else {
+        scope = "none";
+        requiresShift = true;
+      }
+    }
+
     // 1. Ambil Uang Awal
     let uangAwal = 0;
-    
-    // [FIX] getActiveShift_ butuh username — sebelumnya dipanggil tanpa arg → selalu null
-    let activeShift = getActiveShift_(session.username);
+
     if (activeShift) {
        const shiftDate = new Date(activeShift.waktu_mulai);
        shiftDate.setHours(0, 0, 0, 0);
@@ -1300,33 +1326,58 @@ function getKasHarian(token, tanggalStr) {
       }
     }
     
-    // 2. Ambil Pengeluaran
+    // 2. Ambil Pengeluaran sesuai scope
     let pengeluaranList = [];
     let totalPengeluaran = 0;
-    const sheetPengeluaran = getSheet("pengeluaran");
-    const lastRowPg = sheetPengeluaran.getLastRow();
-    if (lastRowPg > 1) {
-      // [PERF] Range-bounded read — cukup 500 pengeluaran terakhir untuk filter hari ini
-      const pgRowCount = Math.min(500, lastRowPg - 1);
-      const pgStartRow = lastRowPg - pgRowCount + 1;
-      const dataPengeluaran = sheetPengeluaran
-        .getRange(pgStartRow, 1, pgRowCount, 6)
-        .getValues();
-      for (let i = 0; i < dataPengeluaran.length; i++) {
-        if (dataPengeluaran[i].join("").trim() === "") continue;
-        const rowDate = new Date(dataPengeluaran[i][1]);
-        rowDate.setHours(0, 0, 0, 0);
-        if (rowDate.getTime() === targetDate.getTime()) {
-          const nominal = parseInt(dataPengeluaran[i][4]) || 0;
-          pengeluaranList.push({
-            id: dataPengeluaran[i][0],
-            tanggal: dataPengeluaran[i][1],
-            keterangan: dataPengeluaran[i][2],
-            kategori: dataPengeluaran[i][3],
-            jumlah: nominal,
-            kasir: dataPengeluaran[i][5],
-          });
-          totalPengeluaran += nominal;
+
+    if (scope !== "none") {
+      const sheetPengeluaran = getSheet("pengeluaran");
+      const lastRowPg = sheetPengeluaran.getLastRow();
+      if (lastRowPg > 1) {
+        // [PERF] Range-bounded read — cukup 500 pengeluaran terakhir untuk filter hari ini
+        const pgRowCount = Math.min(500, lastRowPg - 1);
+        const pgStartRow = lastRowPg - pgRowCount + 1;
+        const dataPengeluaran = sheetPengeluaran
+          .getRange(pgStartRow, 1, pgRowCount, 6)
+          .getValues();
+
+        // Pre-compute window bounds untuk scope "shift" — hindari new Date() di loop
+        let shiftStart = 0;
+        let shiftEnd = 0;
+        if (scope === "shift" && activeShift) {
+          shiftStart = new Date(activeShift.waktu_mulai).getTime();
+          shiftEnd = Date.now();
+        }
+
+        for (let i = 0; i < dataPengeluaran.length; i++) {
+          if (dataPengeluaran[i].join("").trim() === "") continue;
+          const rawTanggal = dataPengeluaran[i][1];
+          if (!rawTanggal) continue;
+
+          let included = false;
+          if (scope === "shift") {
+            // Filter by window waktu shift aktif (timestamp-precise)
+            const t = new Date(rawTanggal).getTime();
+            if (t >= shiftStart && t <= shiftEnd) included = true;
+          } else {
+            // scope === "date" — filter by tanggal saja (lintas shift)
+            const rowDate = new Date(rawTanggal);
+            rowDate.setHours(0, 0, 0, 0);
+            if (rowDate.getTime() === targetDate.getTime()) included = true;
+          }
+
+          if (included) {
+            const nominal = parseInt(dataPengeluaran[i][4]) || 0;
+            pengeluaranList.push({
+              id: dataPengeluaran[i][0],
+              tanggal: dataPengeluaran[i][1],
+              keterangan: dataPengeluaran[i][2],
+              kategori: dataPengeluaran[i][3],
+              jumlah: nominal,
+              kasir: dataPengeluaran[i][5],
+            });
+            totalPengeluaran += nominal;
+          }
         }
       }
     }
@@ -1336,6 +1387,9 @@ function getKasHarian(token, tanggalStr) {
       uang_awal: uangAwal,
       pengeluaran: pengeluaranList,
       total_pengeluaran: totalPengeluaran,
+      scope: scope,                 // "shift" | "date" | "none"
+      requires_shift: requiresShift, // true jika kasir hari ini perlu buka shift dulu
+      active_shift_id: activeShift ? activeShift.id : null,
     };
   } catch (e) {
     logError("getKasHarian", e.message);

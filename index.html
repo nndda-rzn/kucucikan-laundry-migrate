@@ -1737,13 +1737,27 @@
         </div>
 
         <div id="section-kas" class="section section-animate hidden w-full max-w-7xl mx-auto">
-          <div class="flex flex-col md:flex-row justify-between items-start md:items-end gap-5 mb-8">
-            <h3 class="text-2xl font-black text-slate-900">Manajemen Kas Harian</h3>
+          <div class="flex flex-col md:flex-row justify-between items-start md:items-end gap-5 mb-4">
+            <div>
+              <h3 class="text-2xl font-black text-slate-900">Manajemen Kas Harian</h3>
+              <p id="kasScopeHint" class="text-xs font-medium text-slate-500 mt-1">Memuat data kas...</p>
+            </div>
             <div class="flex items-center gap-3">
               <input type="date" id="kasDateFilter" onchange="fetchKasHarian()" class="px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 outline-none" />
               <button onclick="fetchKasHarian()" class="bg-blue-600 hover:bg-blue-700 text-white p-2 rounded-xl shadow-md transition-all">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
               </button>
+            </div>
+          </div>
+
+          <!-- [SCOPE] Banner: kasir hari ini tanpa shift aktif -->
+          <div id="kasNoShiftBanner" class="hidden mb-6 bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-start gap-3">
+            <div class="w-10 h-10 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center flex-shrink-0">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+            </div>
+            <div class="flex-1">
+              <p class="text-sm font-black text-amber-700 mb-0.5">Buka shift dulu untuk mencatat pengeluaran</p>
+              <p class="text-xs text-amber-600 font-medium">Form pengeluaran nonaktif sampai shift dibuka. Klik tombol "Buka Shift" di banner atas dashboard.</p>
             </div>
           </div>
           
@@ -1761,7 +1775,7 @@
                  </div>
                </div>
 
-               <div class="bg-white p-6 rounded-[2rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100">
+               <div id="kasFormPengeluaran" class="bg-white p-6 rounded-[2rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100">
                  <h4 class="font-black text-slate-800 flex items-center gap-2 mb-5">
                    <div class="w-2 h-6 bg-red-500 rounded-full"></div>
                    Catat Pengeluaran
@@ -1800,7 +1814,7 @@
                   <p class="text-2xl font-black" id="kasUangAwal">Rp 0</p>
                 </div>
                 <div class="bg-gradient-to-br from-red-500 to-red-600 p-5 rounded-2xl text-white shadow-lg shadow-red-500/20">
-                  <p class="text-[10px] font-bold text-red-100 uppercase tracking-widest mb-1">Total Pengeluaran</p>
+                  <p id="kasTotalPengeluaranLabel" class="text-[10px] font-bold text-red-100 uppercase tracking-widest mb-1">Total Pengeluaran</p>
                   <p class="text-2xl font-black" id="kasTotalPengeluaran">Rp 0</p>
                 </div>
                 <div class="bg-gradient-to-br from-slate-800 to-slate-900 p-5 rounded-2xl text-white shadow-lg shadow-slate-800/20">
