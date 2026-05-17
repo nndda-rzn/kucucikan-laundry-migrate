@@ -823,9 +823,23 @@
         if (document.visibilityState === "hidden") return; // pause saat tab di background
         const dashEl = document.getElementById("section-overview");
         const histEl = document.getElementById("section-history");
+        const kasEl = document.getElementById("section-kas");
+        const shiftEl = document.getElementById("section-shift");
         const onDash = dashEl && !dashEl.classList.contains("hidden");
         const onHist = histEl && !histEl.classList.contains("hidden");
+        const onKas = kasEl && !kasEl.classList.contains("hidden");
+        const onShift = shiftEl && !shiftEl.classList.contains("hidden");
+
         if (onDash || onHist) loadTransactions(true);
+        // [SYNC] Refresh Manajemen Kas — multi-device sync (kasir & admin di
+        // device berbeda otomatis sinkron tanpa klik refresh manual)
+        if (onKas) {
+          try { fetchKasHarian(); } catch (e) {}
+        }
+        // [SYNC] Refresh Manajemen Shift — admin lihat live status kasir
+        if (onShift && currentUser && currentUser.role === "admin") {
+          try { loadShiftAdminTab(_shiftAdminActiveTab || "aktif"); } catch (e) {}
+        }
       };
       autoRefreshInterval = setInterval(refreshIfRelevant, 60000); // 1 menit
       // [PERF] Saat tab kembali aktif setelah hidden, refresh sekali agar data fresh
