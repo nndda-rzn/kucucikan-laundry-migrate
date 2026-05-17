@@ -19,7 +19,7 @@ _Sistem kasir profesional dengan shift management, profiling instrumentation, da
 <br />
 
 [![Status](https://img.shields.io/badge/status-production_ready-success?style=flat-square)](#)
-[![Version](https://img.shields.io/badge/version-2.6-blue?style=flat-square)](#-changelog)
+[![Version](https://img.shields.io/badge/version-2.7-blue?style=flat-square)](#-changelog)
 [![Runtime](https://img.shields.io/badge/runtime-V8-orange?style=flat-square)](#)
 [![Timezone](https://img.shields.io/badge/timezone-Asia%2FJakarta-violet?style=flat-square)](#)
 [![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)](#-license)
@@ -384,7 +384,10 @@ flowchart TD
   - **Persistent client** — sessionStorage (trx hydration),
     localStorage (settings 1h)
 - **Smart polling** — auto-refresh pause saat
-  `document.visibilityState === "hidden"`, resume on visibility change
+  `document.visibilityState === "hidden"`, resume on visibility change.
+  Cakupan polling 60-detik: `section-overview`, `section-history`,
+  `section-kas`, dan `section-shift` (admin only) — multi-device sync
+  tanpa refresh manual.
 
 #### Profiling Built-In
 Sistem hadir dengan instrumentasi siap pakai untuk diagnosa lambatnya
@@ -706,6 +709,21 @@ Setelah `setupDatabase()` pertama kali dijalankan:
 ---
 
 ## Changelog
+
+### v2.7 — Multi-Device Realtime Sync _(2026-05)_
+**Resolves:** Client lapor card di Manajemen Kas tidak sinkron antara
+session kasir dan admin di device berbeda. Sebelumnya polling 60-detik
+hanya cover section Overview & History.
+
+**Cakupan polling diperluas:**
+- `section-kas` → otomatis panggil `fetchKasHarian` saat section aktif
+- `section-shift` (admin only) → otomatis panggil `loadShiftAdminTab`
+  agar live monitoring kasir tetap fresh
+
+**Tetap visibility-aware:**
+- Pause saat `document.visibilityState === "hidden"` (hemat quota GAS)
+- Instant refresh saat tab kembali fokus via `visibilitychange` event
+- Cycle 60-detik per section relevan (tidak overlap dengan polling lain)
 
 ### v2.6 — Total Penerimaan Card _(2026-05)_
 **Resolves:** Card "Total Penerimaan Hari Ini (Estimasi)" hardcoded
