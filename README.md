@@ -19,7 +19,7 @@ _Sistem kasir profesional dengan shift management, profiling instrumentation, da
 <br />
 
 [![Status](https://img.shields.io/badge/status-production_ready-success?style=flat-square)](#)
-[![Version](https://img.shields.io/badge/version-2.5-blue?style=flat-square)](#-changelog)
+[![Version](https://img.shields.io/badge/version-2.6-blue?style=flat-square)](#-changelog)
 [![Runtime](https://img.shields.io/badge/runtime-V8-orange?style=flat-square)](#)
 [![Timezone](https://img.shields.io/badge/timezone-Asia%2FJakarta-violet?style=flat-square)](#)
 [![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)](#-license)
@@ -133,6 +133,12 @@ tanpa biaya berlangganan bulanan, namun tetap menuntut akuntabilitas
   - Kasir tanpa shift → form disabled + banner peringatan + tooltip
   - Admin → "Pengeluaran Hari Ini" (lintas shift)
   - Tanggal lalu → read-only riwayat
+- **Card Total Penerimaan terhitung otomatis** (v2.6+):
+  - Scope shift → akumulasi DP + pelunasan dalam window shift aktif
+  - Scope date → DP berdasarkan tanggal transaksi + pelunasan
+    berdasarkan `tanggal_pelunasan`
+  - Subtitle realtime: `Tunai Rp X • Non-Tunai Rp Y`
+  - Auto-refresh setelah `createTransaction` & `lunasDanAmbil`
 - Banner edukatif "Uang Awal Otomatis" dari shift aktif
 - Estimasi saldo real-time
 
@@ -700,6 +706,33 @@ Setelah `setupDatabase()` pertama kali dijalankan:
 ---
 
 ## Changelog
+
+### v2.6 — Total Penerimaan Card _(2026-05)_
+**Resolves:** Card "Total Penerimaan Hari Ini (Estimasi)" hardcoded
+Rp 0 sejak v2.0 (komentar dev: "biarkan kosong, isi nanti via dashboard
+update"). Client lapor transaksi & pelunasan yang sudah dikerjakan
+tidak ke-rekap di card.
+
+**Backend `getKasHarian` tambahan field:**
+- `total_penerimaan` — grand total Tunai + Non-Tunai (DP & Pelunasan)
+- `penerimaan_tunai`, `penerimaan_non_tunai` — breakdown per metode
+- `penerimaan_dp`, `penerimaan_pelunasan` — breakdown per jenis
+
+**Logika scope-aware:**
+- `shift` → reuse `computeShiftSummary_` (akurat per window shift,
+  termasuk attribusi `pelunasan_shift_id`)
+- `date` → scan `transactions` 1000 row terakhir, agregat DP berdasarkan
+  tanggal transaksi (kolom 1) + pelunasan berdasarkan `tanggal_pelunasan`
+  (kolom 18)
+- `none` → tetap 0 dengan label "Penerimaan Shift Ini"
+
+**Frontend:**
+- Card `kasPenerimaan` render dari `res.total_penerimaan`
+- Label dinamis: "Penerimaan Shift Ini" / "Penerimaan Hari Ini" /
+  "Penerimaan Hari Ini (Riwayat)" sesuai role + scope
+- Subtitle realtime: `Tunai Rp X • Non-Tunai Rp Y`
+- Helper `refreshKasIfVisible()` dipanggil setelah `createTransaction`
+  & `lunasDanAmbil` agar card sinkron tanpa refresh manual
 
 ### v2.5 — UX/A11y Polish _(2026-05)_
 **P0 — Accessibility & Critical UX**
