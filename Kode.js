@@ -709,6 +709,9 @@ function createTransaction(token, data) {
     ]);
 
     saveOrUpdateCustomer(data.kasir, data.customer, data.whatsapp || "", date);
+    // [PERF] Invalidate cache shift summary — agar getKasHarian, getAllActiveShifts,
+    // dan dashboard live summary refleksikan transaksi baru di window berikutnya.
+    if (activeShift) invalidateShiftSummaryCache_(activeShift.id);
     return {
       success: true,
       id: id,
@@ -804,6 +807,13 @@ function lunasDanAmbil(token, id, metode) {
         }
 
         sheet.getRange(row, 1, 1, 23).setValues([rowData]);
+        // [PERF] Invalidate cache shift summary untuk shift origin (DP-impacted) &
+        // pelunasan-shift (penerimaan pelunasan baru). Pakai Set agar tidak double.
+        const trxShiftId = String(rowData[21] || "");
+        if (trxShiftId) invalidateShiftSummaryCache_(trxShiftId);
+        if (pelunasanShiftId && pelunasanShiftId !== trxShiftId) {
+          invalidateShiftSummaryCache_(pelunasanShiftId);
+        }
         return { success: true };
       }
     }
@@ -1490,6 +1500,12 @@ function savePengeluaran(token, keterangan, kategori, jumlah, dateStr) {
     
     const newId = generateId("PGL");
     sheet.appendRow([newId, dateToSave.toISOString(), keterangan, kategori, jumlah, session.username]);
+    // [PERF] Invalidate cache shift summary user — pengeluaran masuk window shift
+    // aktif kasir, jadi summary perlu refresh. Admin tanpa shift aktif aman (no-op).
+    try {
+      const myShift = getActiveShift_(session.username);
+      if (myShift) invalidateShiftSummaryCache_(myShift.id);
+    } catch (e) { /* silent */ }
     return { success: true, id: newId };
   } catch (e) {
     logError("savePengeluaran", e.message);
@@ -1509,6 +1525,9 @@ function deletePengeluaran(token, id) {
     for (let i = 1; i < data.length; i++) {
       if (data[i][0] === id) {
         sheet.deleteRow(i + 1);
+        // [PERF] Invalidate semua cache shift summary — pengeluaran lintas shift,
+        // tidak tahu shift mana yang terdampak. Operasi delete jarang, aman flush all.
+        try { _flushAllShiftSummaryCache_(); } catch (e) { /* silent */ }
         return { success: true };
       }
     }
@@ -1519,6 +1538,12 @@ function deletePengeluaran(token, id) {
   } finally {
     lock.releaseLock();
   }
+}
+
+// [PERF] Helper: flush memory cache shift summary. ScriptCache tidak bisa
+// di-flush wildcard, tapi memory cache tetap fresh per execution.
+function _flushAllShiftSummaryCache_() {
+  for (const k in _shiftSummaryMem) delete _shiftSummaryMem[k];
 }
 
 function getKasPeriode(token, startDateStr, endDateStr) {
@@ -1704,22 +1729,77 @@ function getDashboardBundle(token) {
 // SHIFT MANAGEMENT
 // ==========================================
 
+// [PERF] Cache shift aktif per-username (memory + ScriptCache 30 dtk).
+// Sebelumnya `getActiveShift_` selalu read seluruh sheet shifts (~200-800ms),
+// dan dipanggil di hot path: createTransaction, lunasDanAmbil, getKasHarian,
+// getDashboardBundle. Cache ini di-invalidate otomatis di open/close/forceClose.
+const ACTIVE_SHIFT_CACHE_PREFIX = "active_shift_user_";
+const ACTIVE_SHIFT_CACHE_TTL = 30; // detik
+const _activeShiftMem = {}; // { username: { value, ts } }
+const ACTIVE_SHIFT_MEM_TTL = 10000; // 10 dtk per execution
+
 function getActiveShift_(username) {
+  if (!username) return null;
+  const now = Date.now();
+  // L1: memory (per execution) — paling cepat
+  const mem = _activeShiftMem[username];
+  if (mem && now - mem.ts < ACTIVE_SHIFT_MEM_TTL) {
+    return mem.value;
+  }
+  // L2: ScriptCache (antar execution)
+  const cacheKey = ACTIVE_SHIFT_CACHE_PREFIX + username;
+  try {
+    const cached = CacheService.getScriptCache().get(cacheKey);
+    if (cached !== null && cached !== undefined) {
+      const parsed = cached === "null" ? null : JSON.parse(cached);
+      _activeShiftMem[username] = { value: parsed, ts: now };
+      return parsed;
+    }
+  } catch (e) { /* cache corrupt → recompute */ }
+
+  // Cold path: read sheet
   const sheet = getSheet("shifts");
-  const data = sheet.getDataRange().getValues();
-  for (let i = data.length - 1; i >= 1; i--) {
-    if (data[i][1] === username && data[i][10] === "Aktif") {
-      return {
-        id: data[i][0],
-        kasir: data[i][1],
-        nama_kasir: data[i][2],
-        waktu_mulai: data[i][3],
-        modal_awal: parseInt(data[i][5]) || 0,
-        status: data[i][10]
-      };
+  const lastRow = sheet.getLastRow();
+  let result = null;
+  if (lastRow > 1) {
+    // [PERF] Range-bound — shift aktif pasti yang terbaru. 200 row cukup.
+    const rowCount = Math.min(200, lastRow - 1);
+    const startRow = lastRow - rowCount + 1;
+    const data = sheet.getRange(startRow, 1, rowCount, 11).getValues();
+    for (let i = data.length - 1; i >= 0; i--) {
+      if (data[i][1] === username && data[i][10] === "Aktif") {
+        result = {
+          id: data[i][0],
+          kasir: data[i][1],
+          nama_kasir: data[i][2],
+          waktu_mulai: data[i][3],
+          modal_awal: parseInt(data[i][5]) || 0,
+          status: data[i][10],
+        };
+        break;
+      }
     }
   }
-  return null;
+  // Persist ke kedua layer
+  try {
+    CacheService.getScriptCache().put(
+      cacheKey,
+      result === null ? "null" : JSON.stringify(result),
+      ACTIVE_SHIFT_CACHE_TTL,
+    );
+  } catch (e) { /* silent */ }
+  _activeShiftMem[username] = { value: result, ts: now };
+  return result;
+}
+
+// [PERF] Invalidate cache shift aktif untuk satu user (atau semua user).
+// Dipanggil di openShift, closeShift, forceCloseShift, autoCloseExpiredShifts.
+function invalidateActiveShiftCacheForUser_(username) {
+  if (!username) return;
+  delete _activeShiftMem[username];
+  try {
+    CacheService.getScriptCache().remove(ACTIVE_SHIFT_CACHE_PREFIX + username);
+  } catch (e) { /* silent */ }
 }
 
 function getActiveShiftAPI(token) {
@@ -1838,8 +1918,21 @@ function openShift(token, modalAwal) {
     // Fallback Kas Harian
     saveUangAwal(token, parseInt(modalAwal) || 0, now);
     invalidateActiveShiftsCache_();
+    invalidateActiveShiftCacheForUser_(session.username);
     
-    return { success: true, message: "Shift berhasil dibuka." };
+    // [PERF] Kembalikan data shift agar client tidak perlu re-fetch dashboard bundle.
+    return {
+      success: true,
+      message: "Shift berhasil dibuka.",
+      data: {
+        id: id,
+        kasir: session.username,
+        nama_kasir: session.nama,
+        waktu_mulai: now,
+        modal_awal: parseInt(modalAwal) || 0,
+        status: "Aktif",
+      },
+    };
   } catch(e) {
     logError("openShift", e.message);
     return { success: false, message: "Gagal membuka shift: " + e.message };
@@ -1852,7 +1945,62 @@ function openShift(token, modalAwal) {
 // pelunasan (yang dilakukan dalam shift ini), dan pengeluaran shift.
 // Digunakan oleh closeShift, forceCloseShift, autoCloseExpiredShifts,
 // dan getShiftHistory (untuk shift yang masih aktif → preview).
+//
+// [PERF] Cache hasil per-shift (memory + ScriptCache 20 dtk) — fungsi ini
+// membaca seluruh sheet transactions, paling mahal di hot path shift admin
+// & getKasHarian. Untuk operasi yang butuh data fresh (closeShift,
+// forceCloseShift, autoCloseExpiredShifts, recomputeShiftBreakdown),
+// invalidate cache via invalidateShiftSummaryCache_(shiftId) sebelum panggil.
+const SHIFT_SUMMARY_CACHE_PREFIX = "shift_summary_";
+const SHIFT_SUMMARY_CACHE_TTL = 20; // detik
+const _shiftSummaryMem = {}; // { shiftId: { value, ts } }
+const SHIFT_SUMMARY_MEM_TTL = 8000; // 8 dtk per execution
+
+function invalidateShiftSummaryCache_(shiftId) {
+  if (!shiftId) return;
+  delete _shiftSummaryMem[shiftId];
+  try {
+    CacheService.getScriptCache().remove(SHIFT_SUMMARY_CACHE_PREFIX + shiftId);
+  } catch (e) { /* silent */ }
+}
+
 function computeShiftSummary_(shiftId, modalAwal) {
+  // Check cache first (memory → ScriptCache)
+  if (shiftId) {
+    const now = Date.now();
+    const mem = _shiftSummaryMem[shiftId];
+    if (mem && now - mem.ts < SHIFT_SUMMARY_MEM_TTL) {
+      return mem.value;
+    }
+    try {
+      const cached = CacheService.getScriptCache().get(SHIFT_SUMMARY_CACHE_PREFIX + shiftId);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        _shiftSummaryMem[shiftId] = { value: parsed, ts: now };
+        return parsed;
+      }
+    } catch (e) { /* cache corrupt → recompute */ }
+  }
+  const result = _computeShiftSummaryRaw_(shiftId, modalAwal);
+  if (shiftId) {
+    const now = Date.now();
+    _shiftSummaryMem[shiftId] = { value: result, ts: now };
+    try {
+      const payload = JSON.stringify(result);
+      // Hindari payload jumbo di cache (limit 100KB per entry GAS)
+      if (payload.length < 95000) {
+        CacheService.getScriptCache().put(
+          SHIFT_SUMMARY_CACHE_PREFIX + shiftId,
+          payload,
+          SHIFT_SUMMARY_CACHE_TTL,
+        );
+      }
+    } catch (e) { /* silent */ }
+  }
+  return result;
+}
+
+function _computeShiftSummaryRaw_(shiftId, modalAwal) {
   const trxSheet = getSheet("transactions");
   const lastRow = trxSheet.getLastRow();
   let totalTransaksi = 0; // grand total nilai transaksi di shift ini
@@ -2035,6 +2183,8 @@ function closeShift(token, shiftId, catatan) {
       return { success: false, message: "Shift tidak ditemukan atau sudah ditutup." };
     }
 
+    // [PERF] Invalidate cache sebelum compute — pastikan summary final fresh
+    invalidateShiftSummaryCache_(shiftId);
     const summary = computeShiftSummary_(shiftId, modalAwal);
     const now = new Date().toISOString();
 
@@ -2071,6 +2221,7 @@ function closeShift(token, shiftId, catatan) {
     return { success: false, message: "Gagal menutup shift: " + e.message };
   } finally {
     invalidateActiveShiftsCache_();
+    invalidateActiveShiftCacheForUser_(session.username);
     lock.releaseLock();
   }
 }
@@ -2079,6 +2230,7 @@ function closeShift(token, shiftId, catatan) {
 function forceCloseShift(token, shiftId, catatan) {
   validateAdminSession_(token);
   const lock = LockService.getScriptLock();
+  let shiftOwner = "";
   try {
     lock.waitLock(5000);
     const sheet = getSheet("shifts");
@@ -2090,6 +2242,7 @@ function forceCloseShift(token, shiftId, catatan) {
       if (data[i][0] === shiftId && data[i][10] === "Aktif") {
         rowIndex = i + 1;
         modalAwal = parseInt(data[i][5]) || 0;
+        shiftOwner = String(data[i][1] || "");
         break;
       }
     }
@@ -2098,6 +2251,8 @@ function forceCloseShift(token, shiftId, catatan) {
       return { success: false, message: "Shift aktif tidak ditemukan." };
     }
 
+    // [PERF] Invalidate cache sebelum compute — pastikan summary final fresh
+    invalidateShiftSummaryCache_(shiftId);
     const summary = computeShiftSummary_(shiftId, modalAwal);
     const now = new Date().toISOString();
     const noteFinal = (catatan ? catatan + " — " : "") + "[Force-closed by admin]";
@@ -2132,6 +2287,7 @@ function forceCloseShift(token, shiftId, catatan) {
     return { success: false, message: "Gagal force close shift: " + e.message };
   } finally {
     invalidateActiveShiftsCache_();
+    if (shiftOwner) invalidateActiveShiftCacheForUser_(shiftOwner);
     lock.releaseLock();
   }
 }
@@ -2254,6 +2410,8 @@ function recomputeShiftBreakdown(token, shiftId) {
       return { success: false, message: "Shift tidak ditemukan." };
     }
     const modalAwal = parseInt(r[5]) || 0;
+    // [PERF] Force fresh — recompute harus akurat untuk persist ke sheet
+    invalidateShiftSummaryCache_(shiftId);
     const summary = computeShiftSummary_(shiftId, modalAwal);
     const breakdownPayload = JSON.stringify({
       breakdownMetode: summary.breakdownMetode || {},
@@ -2283,6 +2441,7 @@ function recomputeShiftBreakdown(token, shiftId) {
 // Mencari shift yang masih Aktif dan menutupnya dengan status Force-Closed.
 function autoCloseExpiredShifts() {
   const lock = LockService.getScriptLock();
+  const closedUsers = [];
   try {
     lock.waitLock(10000);
     const sheet = getSheet("shifts");
@@ -2301,6 +2460,8 @@ function autoCloseExpiredShifts() {
       const modalAwal = parseInt(r[5]) || 0;
       const rowIndex = i + 2;
 
+      // [PERF] Force fresh — auto-close persist ke sheet, harus akurat
+      invalidateShiftSummaryCache_(shiftId);
       const summary = computeShiftSummary_(shiftId, modalAwal);
       const breakdownPayload = JSON.stringify({
         breakdownMetode: summary.breakdownMetode || {},
@@ -2323,6 +2484,7 @@ function autoCloseExpiredShifts() {
         breakdownPayload,
       ];
       sheet.getRange(rowIndex, 1, 1, 15).setValues([updatedRow]);
+      if (r[1]) closedUsers.push(String(r[1]));
       closedCount++;
     }
     if (closedCount > 0) logError("autoCloseExpiredShifts", "Closed " + closedCount + " shifts", "");
@@ -2330,6 +2492,9 @@ function autoCloseExpiredShifts() {
     logError("autoCloseExpiredShifts", e.message);
   } finally {
     invalidateActiveShiftsCache_();
+    for (let i = 0; i < closedUsers.length; i++) {
+      invalidateActiveShiftCacheForUser_(closedUsers[i]);
+    }
     lock.releaseLock();
   }
 }
