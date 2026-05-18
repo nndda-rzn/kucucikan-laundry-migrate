@@ -88,18 +88,22 @@ tanpa biaya berlangganan bulanan, namun tetap menuntut akuntabilitas
 - Auto-save draft tiap 5 detik (anti-crash browser)
 - Cetak nota digital (thermal-ready)
 - Konfirmasi WhatsApp dengan template kustom
+- Status transaksi: Proses → Selesai → Diambil
+- Riwayat transaksi dengan filter & search
 
 ### Manajemen Pelanggan
 - CRUD pelanggan dengan WA ternormalisasi
 - Riwayat & total spent per pelanggan
 - Auto-suggest saat input transaksi baru
 - Badge VIP otomatis untuk pelanggan loyal
+- Tracking terakhir order & frekuensi transaksi
 
 ### Manajemen Layanan
 - Katalog dinamis (kiloan, satuan, kategori)
 - Toggle aktif/nonaktif dengan optimistic UI
 - Indikator popularitas paket
 - Migration kolom otomatis
+- Durasi estimasi proses per paket
 
 </td>
 <td width="50%" valign="top">
@@ -124,10 +128,11 @@ tanpa biaya berlangganan bulanan, namun tetap menuntut akuntabilitas
 
 ### Dasbor Analitik
 - Real-time omzet, antrean, target hari ini
-- Multi-cashier sync (auto-refresh 1 menit)
+- Multi-cashier sync (auto-refresh 60 detik)
 - Pause polling saat tab background → resume on focus
 - Tren pendapatan + chart layanan terlaris
 - Export laporan CSV / PDF (lazy-loaded)
+- Multi-device realtime sync (v2.7+)
 - **Manajemen Kas role-aware scope:**
   - Kasir + shift aktif → "Pengeluaran Shift Ini" (window waktu shift)
   - Kasir tanpa shift → form disabled + banner peringatan + tooltip
@@ -164,12 +169,13 @@ tanpa biaya berlangganan bulanan, namun tetap menuntut akuntabilitas
 - Focus management saat modal open/close
 
 ### Administrasi
-- Manajemen pegawai (admin/kasir)
+- Manajemen pegawai (admin/kasir) dengan role-based access
 - Pengaturan toko (nama, logo, rekening)
 - Template WhatsApp kustom dengan placeholder
-- Auto-backup harian ke Google Drive
-- Error logging silent ke sheet `error_logs`
-- **Performance benchmark** built-in (`runPerfBenchmark`)
+- Auto-backup harian ke Google Drive (02:00 WIB)
+- Error logging silent ke sheet `error_logs` (auto-rotate 500 row)
+- Performance benchmark built-in (`runPerfBenchmark`)
+- Profiling instrumentation dengan perf_logs (auto-rotate 1000 row)
 
 </td>
 </tr>
@@ -181,16 +187,17 @@ tanpa biaya berlangganan bulanan, namun tetap menuntut akuntabilitas
 
 | Layer | Teknologi |
 |-------|-----------|
-| **Backend** | Google Apps Script (V8 Runtime), JavaScript |
-| **Database** | Google Sheets (8 sheet relasional) |
+| **Backend** | Google Apps Script (V8 Runtime), JavaScript ES2020 |
+| **Database** | Google Sheets (8 sheet relasional + 2 log sheets) |
 | **Frontend** | HTML5, JavaScript ES2020, Tailwind CSS v4.2.3 |
-| **Charts** | ApexCharts (lazy-loaded) |
-| **PDF Export** | jsPDF + jsPDF-AutoTable (lazy-loaded) |
-| **Tooling** | clasp (CLI), npm, Tailwind CLI |
+| **Charts** | ApexCharts (lazy-loaded ~250KB) |
+| **PDF Export** | jsPDF + jsPDF-AutoTable (lazy-loaded ~150KB) |
+| **Tooling** | clasp (CLI), npm, Tailwind CLI, Git |
 | **Hosting** | Google Workspace (Web App URL) |
-| **Concurrency** | LockService |
-| **Caching** | CacheService + sessionStorage + localStorage + RAM |
-| **Profiling** | Custom `_perf` wrapper + sample log ke sheet |
+| **Concurrency** | LockService (atomic writes) |
+| **Caching** | 4-layer: CacheService + Memory + sessionStorage + localStorage |
+| **Profiling** | Custom `_perf` wrapper + sample log ke perf_logs sheet |
+| **Security** | Token-based session (8h TTL) + salted password hash |
 
 ---
 
