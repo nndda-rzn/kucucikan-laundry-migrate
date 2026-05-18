@@ -24,6 +24,67 @@
   let draftSaveInterval = null; // [OPT] Draft auto-save
   let pendingPelunasanId = null; // [FIX] Deklarasi eksplisit
   let currentShift = null; // Shift state
+  let transactionsHash = null; // [OPT] ETag for incremental sync
+
+  // [OPT] IndexedDB helper for persistent client-side cache
+  const trxDB = {
+    dbName: "LaundryPOS",
+    storeName: "transactions",
+    version: 1,
+
+    open: function() {
+      return new Promise((resolve, reject) => {
+        if (!window.indexedDB) {
+          reject(new Error("IndexedDB not supported"));
+          return;
+        }
+        const request = indexedDB.open(this.dbName, this.version);
+        request.onerror = () => reject(request.error);
+        request.onsuccess = () => resolve(request.result);
+        request.onupgradeneeded = (e) => {
+          const db = e.target.result;
+          if (!db.objectStoreNames.contains(this.storeName)) {
+            db.createObjectStore(this.storeName);
+          }
+        };
+      });
+    },
+
+    save: function(data, hash) {
+      this.open().then(db => {
+        const tx = db.transaction([this.storeName], "readwrite");
+        const store = tx.objectStore(this.storeName);
+        store.put({ data: data, hash: hash, ts: Date.now() }, "trx_cache");
+        db.close();
+      }).catch(e => console.warn("[trxDB] save failed:", e));
+    },
+
+    load: function() {
+      return this.open().then(db => {
+        return new Promise((resolve, reject) => {
+          const tx = db.transaction([this.storeName], "readonly");
+          const store = tx.objectStore(this.storeName);
+          const request = store.get("trx_cache");
+          request.onsuccess = () => {
+            db.close();
+            const result = request.result;
+            if (result && result.data) {
+              resolve({ data: result.data, hash: result.hash, ts: result.ts });
+            } else {
+              resolve(null);
+            }
+          };
+          request.onerror = () => {
+            db.close();
+            reject(request.error);
+          };
+        });
+      }).catch(e => {
+        console.warn("[trxDB] load failed:", e);
+        return null;
+      });
+    }
+  };
 
   // [PERF] Lightweight client-side profiling.
   // Setiap RPC GAS yang di-wrap dengan trackedRun(name, runner) akan
@@ -955,11 +1016,31 @@
         })
         .getDashboardBundleFast(currentUser.token);
 
-      // [OPT] Auto-refresh dashboard setiap 1 menit (multi-kasir sync)
-      // [PERF] Smart polling: pause saat tab hidden, refresh ketika tab kembali aktif
+      // [OPT] Auto-refresh dashboard dengan adaptive interval (multi-kasir sync)
+      // [PERF] Smart polling: pause saat tab hidden, adaptive interval saat idle
       if (autoRefreshInterval) clearInterval(autoRefreshInterval);
+
+      let lastUserActivity = Date.now();
+      let currentPollingInterval = 30000; // Start with 30s (active)
+
+      // Track user activity
+      const updateActivity = () => { lastUserActivity = Date.now(); };
+      document.addEventListener("click", updateActivity);
+      document.addEventListener("keypress", updateActivity);
+      document.addEventListener("scroll", updateActivity);
+
       const refreshIfRelevant = function () {
         if (document.visibilityState === "hidden") return; // pause saat tab di background
+
+        // [OPT] Adaptive interval: active (30s) vs idle (120s)
+        const idleTime = Date.now() - lastUserActivity;
+        const newInterval = idleTime > 120000 ? 120000 : 30000;
+        if (newInterval !== currentPollingInterval) {
+          currentPollingInterval = newInterval;
+          clearInterval(autoRefreshInterval);
+          autoRefreshInterval = setInterval(refreshIfRelevant, currentPollingInterval);
+        }
+
         const dashEl = document.getElementById("section-overview");
         const histEl = document.getElementById("section-history");
         const kasEl = document.getElementById("section-kas");
@@ -970,8 +1051,7 @@
         const onShift = shiftEl && !shiftEl.classList.contains("hidden");
 
         if (onDash || onHist) loadTransactions(true);
-        // [SYNC] Refresh Manajemen Kas — multi-device sync (kasir & admin di
-        // device berbeda otomatis sinkron tanpa klik refresh manual)
+        // [SYNC] Refresh Manajemen Kas — multi-device sync
         if (onKas) {
           try { fetchKasHarian(); } catch (e) {}
         }
@@ -980,12 +1060,14 @@
           try { loadShiftAdminTab(_shiftAdminActiveTab || "aktif"); } catch (e) {}
         }
       };
-      autoRefreshInterval = setInterval(refreshIfRelevant, 60000); // 1 menit
+      autoRefreshInterval = setInterval(refreshIfRelevant, currentPollingInterval);
+
       // [PERF] Saat tab kembali aktif setelah hidden, refresh sekali agar data fresh
       if (!window._visibilityRefreshBound) {
         window._visibilityRefreshBound = true;
         document.addEventListener("visibilitychange", function () {
           if (document.visibilityState === "visible") {
+            lastUserActivity = Date.now(); // Reset activity timer
             refreshIfRelevant();
           }
         });
@@ -1768,30 +1850,44 @@
       return;
     }
 
-    // [PERF] Hydrate dari sessionStorage agar refresh page tidak hilangkan dashboard
+    // [PERF] Hydrate dari IndexedDB → sessionStorage → fresh fetch
     if (!forceRefresh && allTransactions.length === 0) {
-      try {
-        const cached = sessionStorage.getItem("trx_cache_v1");
-        if (cached) {
-          const parsed = JSON.parse(cached);
-          if (parsed && parsed.data && parsed._ts && now - parsed._ts < TRX_CACHE_TTL * 3) {
-            allTransactions = parsed.data;
-            transactionsCacheTime = parsed._ts;
-            updateOverviewStats();
-            updateRecentActivity();
-            // Tetap fetch fresh di background
-            forceRefresh = true;
-          }
+      // Try IndexedDB first (persistent across browser sessions)
+      trxDB.load().then(cached => {
+        if (cached && cached.data && now - cached.ts < TRX_CACHE_TTL * 10) {
+          allTransactions = cached.data;
+          transactionsHash = cached.hash;
+          transactionsCacheTime = cached.ts;
+          updateOverviewStats();
+          updateRecentActivity();
+          // Still fetch fresh in background
+          loadTransactions(true);
+        } else {
+          // Fallback to sessionStorage
+          try {
+            const ssCached = sessionStorage.getItem("trx_cache_v1");
+            if (ssCached) {
+              const parsed = JSON.parse(ssCached);
+              if (parsed && parsed.data && parsed._ts && now - parsed._ts < TRX_CACHE_TTL * 3) {
+                allTransactions = parsed.data;
+                transactionsCacheTime = parsed._ts;
+                updateOverviewStats();
+                updateRecentActivity();
+              }
+            }
+          } catch (e) { /* ignore */ }
+          loadTransactions(true);
         }
-      } catch (e) { /* ignore */ }
+      }).catch(() => {
+        loadTransactions(true);
+      });
+      return;
     }
 
     // [P0] Silent refresh — hanya tampilkan loading global saat pertama kali (data kosong)
-    // Auto-refresh setiap 1 menit tidak boleh memblokir UI
     const isFirstLoad = allTransactions.length === 0;
     if (isFirstLoad) showLoading(true);
 
-    // Tampilkan indikator refresh kecil di pojok
     const refreshEl = document.getElementById("lastRefresh");
     if (refreshEl && !isFirstLoad) refreshEl.innerText = "Memperbarui...";
 
@@ -1802,18 +1898,41 @@
           showToast("Data transaksi kosong dari server.", "error");
           return;
         }
+
+        // [OPT] ETag support: skip update jika data tidak berubah
+        if (data.noChange) {
+          transactionsCacheTime = Date.now();
+          if (data.hash) transactionsHash = data.hash;
+          if (refreshEl)
+            refreshEl.innerText =
+              "Diperbarui: " +
+              new Date().toLocaleTimeString("id-ID", {
+                hour: "2-digit",
+                minute: "2-digit",
+              });
+          return;
+        }
+
         allTransactions = data;
-        transactionsCacheTime = Date.now(); // [P1] Catat waktu cache
-        // [PERF] Persist ke sessionStorage untuk hydration berikutnya
+        transactionsCacheTime = Date.now();
+
+        // [OPT] Compute hash for next ETag check
+        if (data.length > 0) {
+          const lastItem = data[data.length - 1];
+          transactionsHash = data.length + "_" + lastItem.id + "_" + lastItem.tanggal;
+        }
+
+        // [PERF] Persist ke IndexedDB + sessionStorage
+        trxDB.save(data, transactionsHash);
         try {
           sessionStorage.setItem("trx_cache_v1", JSON.stringify({
             data: data,
             _ts: transactionsCacheTime,
           }));
         } catch (e) { /* sessionStorage full atau di-disable, abaikan */ }
+
         updateOverviewStats();
         updateRecentActivity();
-        // Tampilkan timestamp terakhir diperbarui
         if (refreshEl)
           refreshEl.innerText =
             "Diperbarui: " +
@@ -1830,11 +1949,10 @@
       })
       .withFailureHandler(function (err) {
         if (isFirstLoad) showLoading(false);
-        // [P0] Jangan alert — tampilkan toast agar tidak blokir UI
         showToast("Gagal memuat transaksi: " + err.message, "error");
         if (refreshEl) refreshEl.innerText = "Gagal memperbarui";
       })
-      .getTransactions(currentUser.token);
+      .getTransactions(currentUser.token, transactionsHash);
   }
 
   function updateOverviewStats() {
