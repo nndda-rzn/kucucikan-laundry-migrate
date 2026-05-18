@@ -12,7 +12,7 @@ function getDbId_() {
   let dbId = props.getProperty("DB_ID");
   if (!dbId) {
     // Fallback: auto-migrate hardcoded ID ke Script Properties
-    dbId = "1_3qq0iZyn8dF7YwY0Y0qyyAtXu2n8tOKdpFuW1qkAzY";
+    dbId = "17z-smYrnjOSilzgIK2FjD8fODTKLMsZLytf9YPbJtTI";
     props.setProperty("DB_ID", dbId);
   }
   _dbIdCache = dbId;
