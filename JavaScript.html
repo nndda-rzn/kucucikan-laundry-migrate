@@ -3550,99 +3550,120 @@ Terima kasih.`;
         let filtered = combined.report || [];
         currentReportData = filtered;
 
-        const labels = [];
-        const revenueData = [];
-        const countData = [];
-        const packageCount = {};
-        const grouped = {};
-        const countGrouped = {};
-        const customerCount = {};
-        const paymentMethodCount = {};
+        // [OPT] Gunakan pre-aggregated data dari server jika tersedia
+        // Menghilangkan loop O(n) di browser — instant render
+        const agg = combined.aggregated;
+        let labels = [];
+        let revenueData = [];
+        let countData = [];
+        let packageCount = {};
+        let customerCount = {};
+        let paymentMethodCount = {};
         let totalRev = 0;
 
-        let startDObj = startDate ? new Date(startDate) : null;
-        let endDObj = endDate ? new Date(endDate) : null;
+        if (agg && agg.byDate) {
+          // Server sudah aggregate — langsung pakai
+          const grouped = agg.byDate;
+          const countGrouped = agg.countByDate || {};
+          packageCount = agg.byPackage || {};
+          customerCount = agg.byCustomer || {};
+          paymentMethodCount = agg.byPaymentMethod || {};
+          totalRev = agg.totalRevenue || 0;
 
-        for (let i = 0; i < filtered.length; i++) {
-          const t = filtered[i];
-          const trDate = new Date(t.tanggal);
-          const pDate = t.tanggal_pelunasan
-            ? new Date(t.tanggal_pelunasan)
-            : null;
+          const sortedKeys = Object.keys(grouped).sort(function (a, b) {
+            return new Date(a) - new Date(b);
+          });
+          for (let i = 0; i < sortedKeys.length; i++) {
+            labels.push(sortedKeys[i]);
+            revenueData.push(grouped[sortedKeys[i]]);
+            countData.push(countGrouped[sortedKeys[i]] || 0);
+          }
+        } else {
+          // Fallback: aggregate di client (backward compat)
+          const grouped = {};
+          const countGrouped = {};
+          let startDObj = startDate ? new Date(startDate) : null;
+          let endDObj = endDate ? new Date(endDate) : null;
 
-          let dp = parseInt(t.nominal_dp || 0);
-          let pelunasan = parseInt(t.nominal_pelunasan || 0);
+          for (let i = 0; i < filtered.length; i++) {
+            const t = filtered[i];
+            const trDate = new Date(t.tanggal);
+            const pDate = t.tanggal_pelunasan
+              ? new Date(t.tanggal_pelunasan)
+              : null;
 
-          let trInRange =
-            !isNaN(trDate) &&
-            (!startDObj || trDate >= startDObj) &&
-            (!endDObj || trDate <= endDObj);
-          let pInRange =
-            pDate &&
-            !isNaN(pDate) &&
-            (!startDObj || pDate >= startDObj) &&
-            (!endDObj || pDate <= endDObj);
+            let dp = parseInt(t.nominal_dp || 0);
+            let pelunasan = parseInt(t.nominal_pelunasan || 0);
 
-          const method = t.metode_pembayaran || "Lainnya";
+            let trInRange =
+              !isNaN(trDate) &&
+              (!startDObj || trDate >= startDObj) &&
+              (!endDObj || trDate <= endDObj);
+            let pInRange =
+              pDate &&
+              !isNaN(pDate) &&
+              (!startDObj || pDate >= startDObj) &&
+              (!endDObj || pDate <= endDObj);
 
-          // 1. DP (masuk di tanggal nota jika dalam rentang)
-          if (trInRange) {
-            const dateKey = trDate.toLocaleDateString("id-ID", {
-              day: "2-digit",
-              month: "short",
-            });
-            if (dp > 0) {
-              grouped[dateKey] = (grouped[dateKey] || 0) + dp;
-              totalRev += dp;
-              if (method !== "Nanti")
-                paymentMethodCount[method] =
-                  (paymentMethodCount[method] || 0) + dp;
-            } else {
-              grouped[dateKey] = grouped[dateKey] || 0;
-            }
-            countGrouped[dateKey] = (countGrouped[dateKey] || 0) + 1;
+            const method = t.metode_pembayaran || "Lainnya";
 
-            if (t.items && typeof t.items === "string") {
-              try {
-                t.items = JSON.parse(t.items);
-              } catch (e) {}
-            }
-            if (t.items && t.items.length > 0) {
-              t.items.forEach((item) => {
-                packageCount[item.paket] = (packageCount[item.paket] || 0) + 1;
+            if (trInRange) {
+              const dateKey = trDate.toLocaleDateString("id-ID", {
+                day: "2-digit",
+                month: "short",
               });
-            } else {
-              packageCount[t.paket] = (packageCount[t.paket] || 0) + 1;
+              if (dp > 0) {
+                grouped[dateKey] = (grouped[dateKey] || 0) + dp;
+                totalRev += dp;
+                if (method !== "Nanti")
+                  paymentMethodCount[method] =
+                    (paymentMethodCount[method] || 0) + dp;
+              } else {
+                grouped[dateKey] = grouped[dateKey] || 0;
+              }
+              countGrouped[dateKey] = (countGrouped[dateKey] || 0) + 1;
+
+              if (t.items && typeof t.items === "string") {
+                try {
+                  t.items = JSON.parse(t.items);
+                } catch (e) {}
+              }
+              if (t.items && t.items.length > 0) {
+                t.items.forEach((item) => {
+                  packageCount[item.paket] = (packageCount[item.paket] || 0) + 1;
+                });
+              } else {
+                packageCount[t.paket] = (packageCount[t.paket] || 0) + 1;
+              }
+
+              if (t.customer)
+                customerCount[t.customer] = (customerCount[t.customer] || 0) + 1;
             }
 
-            if (t.customer)
-              customerCount[t.customer] = (customerCount[t.customer] || 0) + 1;
-          }
-
-          // 2. Pelunasan (masuk di tanggal pelunasan jika dalam rentang)
-          if (pInRange) {
-            const pDateKey = pDate.toLocaleDateString("id-ID", {
-              day: "2-digit",
-              month: "short",
-            });
-            const methodPelunasan = t.metode_pelunasan || method;
-            if (pelunasan > 0) {
-              grouped[pDateKey] = (grouped[pDateKey] || 0) + pelunasan;
-              totalRev += pelunasan;
-              if (methodPelunasan !== "Nanti")
-                paymentMethodCount[methodPelunasan] =
-                  (paymentMethodCount[methodPelunasan] || 0) + pelunasan;
+            if (pInRange) {
+              const pDateKey = pDate.toLocaleDateString("id-ID", {
+                day: "2-digit",
+                month: "short",
+              });
+              const methodPelunasan = t.metode_pelunasan || method;
+              if (pelunasan > 0) {
+                grouped[pDateKey] = (grouped[pDateKey] || 0) + pelunasan;
+                totalRev += pelunasan;
+                if (methodPelunasan !== "Nanti")
+                  paymentMethodCount[methodPelunasan] =
+                    (paymentMethodCount[methodPelunasan] || 0) + pelunasan;
+              }
             }
           }
-        }
 
-        const sortedKeys = Object.keys(grouped).sort(function (a, b) {
-          return new Date(a) - new Date(b);
-        });
-        for (let i = 0; i < sortedKeys.length; i++) {
-          labels.push(sortedKeys[i]);
-          revenueData.push(grouped[sortedKeys[i]]);
-          countData.push(countGrouped[sortedKeys[i]]);
+          const sortedKeys = Object.keys(grouped).sort(function (a, b) {
+            return new Date(a) - new Date(b);
+          });
+          for (let i = 0; i < sortedKeys.length; i++) {
+            labels.push(sortedKeys[i]);
+            revenueData.push(grouped[sortedKeys[i]]);
+            countData.push(countGrouped[sortedKeys[i]] || 0);
+          }
         }
 
         const sortedCustomers = Object.keys(customerCount)
