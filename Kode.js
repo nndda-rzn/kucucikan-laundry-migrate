@@ -132,6 +132,18 @@ function invalidateKasCache_() {
   } catch (e) {}
 }
 
+function invalidateReportCache_() {
+  try {
+    const cache = CacheService.getScriptCache();
+    const keys = cache.getAllKeys();
+    for (let i = 0; i < keys.length; i++) {
+      if (keys[i].startsWith("report_data_") || keys[i].startsWith("kas_periode_")) {
+        cache.remove(keys[i]);
+      }
+    }
+  } catch (e) {}
+}
+
 // [P0] Generate ID unik menggunakan Utilities.getUuid() — menghindari collision
 function generateId(prefix) {
   return prefix + "-" + Utilities.getUuid().replace(/-/g, "").substring(0, 12);
@@ -755,6 +767,7 @@ function createTransaction(token, data) {
     // [PERF] Invalidate cache shift summary — agar getKasHarian, getAllActiveShifts,
     // dan dashboard live summary refleksikan transaksi baru di window berikutnya.
     invalidateKasCache_();
+    invalidateReportCache_();
     if (activeShift) invalidateShiftSummaryCache_(activeShift.id);
     return {
       success: true,
@@ -870,6 +883,7 @@ function lunasDanAmbil(token, id, metode) {
   } finally {
     invalidateTransactionsCache_();
     invalidateKasCache_();
+    invalidateReportCache_();
     lock.releaseLock();
   }
 }
@@ -1569,6 +1583,7 @@ function savePengeluaran(token, keterangan, kategori, jumlah, dateStr) {
       if (myShift) invalidateShiftSummaryCache_(myShift.id);
     } catch (e) { /* silent */ }
     invalidateKasCache_();
+    invalidateReportCache_();
     return { success: true, id: newId };
   } catch (e) {
     logError("savePengeluaran", e.message);
@@ -1592,6 +1607,7 @@ function deletePengeluaran(token, id) {
         // tidak tahu shift mana yang terdampak. Operasi delete jarang, aman flush all.
         try { _flushAllShiftSummaryCache_(); } catch (e) { /* silent */ }
         invalidateKasCache_();
+        invalidateReportCache_();
         return { success: true };
       }
     }
@@ -1613,6 +1629,14 @@ function _flushAllShiftSummaryCache_() {
 function getKasPeriode(token, startDateStr, endDateStr) {
   validateAdminSession_(token);
   try {
+    // [OPT] CacheService 30s — hindari baca ulang sheet saat user refresh laporan
+    const cache = CacheService.getScriptCache();
+    const cacheKey = "kas_periode_" + (startDateStr || "all") + "_" + (endDateStr || "all");
+    const cached = cache.get(cacheKey);
+    if (cached) {
+      try { return JSON.parse(cached); } catch (e) {}
+    }
+
     // [OPT] Hapus setupKasSheet_() — tidak diperlukan di operasi baca
     let startD = startDateStr ? new Date(startDateStr) : null;
     if (startD) startD.setHours(0, 0, 0, 0);
@@ -1642,12 +1666,16 @@ function getKasPeriode(token, startDateStr, endDateStr) {
       if (endD && rowDate > endD) continue;
       totalPengeluaran += parseInt(dataPengeluaran[i][4]) || 0;
     }
-    
-    return { 
-      success: true, 
-      total_uang_awal: totalUangAwal, 
-      total_pengeluaran: totalPengeluaran 
+
+    const result = {
+      success: true,
+      total_uang_awal: totalUangAwal,
+      total_pengeluaran: totalPengeluaran
     };
+
+    try { cache.put(cacheKey, JSON.stringify(result), 30); } catch (e) {}
+
+    return result;
   } catch (e) {
     logError("getKasPeriode", e.message);
     return { success: false, message: "Gagal mengambil data kas periode: " + e.message };
@@ -1658,6 +1686,14 @@ function getKasPeriode(token, startDateStr, endDateStr) {
 function getReportData(token, startDateStr, endDateStr) {
   validateAdminSession_(token);
   try {
+    // [OPT] CacheService 30s — hindari baca ulang sheet saat user refresh laporan
+    const cache = CacheService.getScriptCache();
+    const cacheKey = "report_data_" + (startDateStr || "all") + "_" + (endDateStr || "all");
+    const cached = cache.get(cacheKey);
+    if (cached) {
+      try { return JSON.parse(cached); } catch (e) {}
+    }
+
     const sheet = getSheet("transactions");
     const lastRow = sheet.getLastRow();
     if (lastRow <= 1) return [];
@@ -1736,6 +1772,11 @@ function getReportData(token, startDateStr, endDateStr) {
         pelunasan_shift_id: String(r[22] || ""),
       });
     }
+
+    try {
+      cache.put(cacheKey, JSON.stringify(validData), 30);
+    } catch (e) {}
+
     return validData;
   } catch (e) {
     logError("getReportData", e.message);
@@ -1751,9 +1792,14 @@ function getReportAndKasData(token, startDateStr, endDateStr) {
   try {
     const reportData = getReportData(token, startDateStr, endDateStr);
     const kasResult = getKasPeriode(token, startDateStr, endDateStr);
+
+    // [OPT] Pre-aggregate data on server — client hanya render, tidak loop
+    const aggregated = aggregateReportData_(reportData, startDateStr, endDateStr);
+
     return {
       success: true,
       report: reportData,
+      aggregated: aggregated,
       kas: kasResult
     };
   } catch (e) {
@@ -1762,7 +1808,83 @@ function getReportAndKasData(token, startDateStr, endDateStr) {
   }
 }
 
-// [OPT] Dashboard Bundle: satu GAS call untuk menggantikan 3 call saat login
+// [OPT] Pre-aggregate report data on server — client hanya render, tidak loop
+// Mengurangi beban CPU browser dari ~200-800ms menjadi instant render
+function aggregateReportData_(reportData, startDateStr, endDateStr) {
+  try {
+    const grouped = {};
+    const countGrouped = {};
+    const packageCount = {};
+    const customerCount = {};
+    const paymentMethodCount = {};
+    let totalRev = 0;
+
+    let startD = startDateStr ? new Date(startDateStr) : null;
+    if (startD) startD.setHours(0, 0, 0, 0);
+    let endD = endDateStr ? new Date(endDateStr) : null;
+    if (endD) endD.setHours(23, 59, 59, 999);
+
+    for (let i = 0; i < reportData.length; i++) {
+      const t = reportData[i];
+      const trDate = new Date(t.tanggal);
+      const pDate = t.tanggal_pelunasan ? new Date(t.tanggal_pelunasan) : null;
+
+      let dp = parseInt(t.nominal_dp || 0);
+      let pelunasan = parseInt(t.nominal_pelunasan || 0);
+
+      let trInRange = !isNaN(trDate) && (!startD || trDate >= startD) && (!endD || trDate <= endD);
+      let pInRange = pDate && !isNaN(pDate) && (!startD || pDate >= startD) && (!endD || pDate <= endD);
+
+      const method = t.metode_pembayaran || "Lainnya";
+
+      if (trInRange) {
+        const dateKey = trDate.toLocaleDateString("id-ID", { day: "2-digit", month: "short" });
+        if (dp > 0) {
+          grouped[dateKey] = (grouped[dateKey] || 0) + dp;
+          totalRev += dp;
+          if (method !== "Nanti") paymentMethodCount[method] = (paymentMethodCount[method] || 0) + dp;
+        } else {
+          grouped[dateKey] = grouped[dateKey] || 0;
+        }
+        countGrouped[dateKey] = (countGrouped[dateKey] || 0) + 1;
+
+        if (t.items && typeof t.items === "string") {
+          try { t.items = JSON.parse(t.items); } catch (e) {}
+        }
+        if (t.items && t.items.length > 0) {
+          for (let j = 0; j < t.items.length; j++) {
+            packageCount[t.items[j].paket] = (packageCount[t.items[j].paket] || 0) + 1;
+          }
+        } else {
+          packageCount[t.paket] = (packageCount[t.paket] || 0) + 1;
+        }
+        if (t.customer) customerCount[t.customer] = (customerCount[t.customer] || 0) + 1;
+      }
+
+      if (pInRange) {
+        const pDateKey = pDate.toLocaleDateString("id-ID", { day: "2-digit", month: "short" });
+        const methodPelunasan = t.metode_pelunasan || method;
+        if (pelunasan > 0) {
+          grouped[pDateKey] = (grouped[pDateKey] || 0) + pelunasan;
+          totalRev += pelunasan;
+          if (methodPelunasan !== "Nanti") paymentMethodCount[methodPelunasan] = (paymentMethodCount[methodPelunasan] || 0) + pelunasan;
+        }
+      }
+    }
+
+    return {
+      byDate: grouped,
+      countByDate: countGrouped,
+      byPackage: packageCount,
+      byCustomer: customerCount,
+      byPaymentMethod: paymentMethodCount,
+      totalRevenue: totalRev
+    };
+  } catch (e) {
+    logError("aggregateReportData_", e.message);
+    return { byDate: {}, countByDate: {}, byPackage: {}, byCustomer: {}, byPaymentMethod: {}, totalRevenue: 0 };
+  }
+}
 // (getTransactions + getSettings + getPackages → 1 getDashboardBundle)
 // Menghemat 2 round-trip GAS (~2-10 detik) setiap kali pengguna login atau reload.
 function getDashboardBundle(token) {
@@ -2011,6 +2133,7 @@ function openShift(token, modalAwal) {
     
     // [PERF] Kembalikan data shift agar client tidak perlu re-fetch dashboard bundle.
     invalidateKasCache_();
+    invalidateReportCache_();
     return {
       success: true,
       message: "Shift berhasil dibuka.",
@@ -2313,6 +2436,7 @@ function closeShift(token, shiftId, catatan) {
     invalidateActiveShiftsCache_();
     invalidateActiveShiftCacheForUser_(session.username);
     invalidateKasCache_();
+    invalidateReportCache_();
     lock.releaseLock();
   }
 }
