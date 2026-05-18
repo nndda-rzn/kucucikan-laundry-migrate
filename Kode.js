@@ -116,6 +116,10 @@ function invalidatePriceMapCache_() {
   try { CacheService.getScriptCache().remove(PRICE_MAP_CACHE_KEY); } catch (e) {}
 }
 
+function invalidateTransactionsCache_() {
+  try { CacheService.getScriptCache().remove("transactions_list"); } catch (e) {}
+}
+
 // [P0] Generate ID unik menggunakan Utilities.getUuid() — menghindari collision
 function generateId(prefix) {
   return prefix + "-" + Utilities.getUuid().replace(/-/g, "").substring(0, 12);
@@ -173,8 +177,8 @@ function _perf(name, fn) {
     const result = fn();
     const dur = Date.now() - t0;
     console.log("[PERF][" + name + "] " + dur + "ms");
-    // Sample 1/5 ke sheet untuk tidak membebani I/O
-    if (Math.random() < 0.2) {
+    // Sample 1/10 ke sheet untuk tidak membebani I/O
+    if (Math.random() < 0.1) {
       try {
         const ss = getSS();
         let s = ss.getSheetByName("perf_logs");
@@ -539,6 +543,10 @@ function parseSafeDate(rawDate) {
 function getTransactions(token) {
   validateSession_(token);
   try {
+    // [OPT] Check cache first (60s TTL)
+    const cached = CacheService.getScriptCache().get("transactions_list");
+    if (cached) return JSON.parse(cached);
+
     const sheet = getSheet("transactions");
     const lastRow = sheet.getLastRow();
     if (lastRow <= 1) return [];
@@ -554,7 +562,7 @@ function getTransactions(token) {
       let row = rawData[i];
       if (row.join("").trim() !== "") validData.push(row);
     }
-    return validData.map((r) => ({
+    const result = validData.map((r) => ({
       id: String(r[0] || "TRX-?"),
       tanggal: parseSafeDate(r[1]),
       customer: String(r[2] || "Pelanggan"),
@@ -596,9 +604,11 @@ function getTransactions(token) {
       nominal_dp: parseInt(r[19]) || parseInt(r[16]) || 0,
       nominal_pelunasan: parseInt(r[20]) || 0,
       metode_pelunasan: String(r[13] || ""),
-      shift_id: String(r[21] || ""),
-      pelunasan_shift_id: String(r[22] || ""),
     }));
+
+    // [OPT] Cache result untuk 60 detik
+    CacheService.getScriptCache().put("transactions_list", JSON.stringify(result), 60);
+    return result;
   } catch (e) {
     logError("getTransactions", e.message);
     throw new Error("Gagal baca sheet Transaksi: " + e.message);
@@ -728,6 +738,7 @@ function createTransaction(token, data) {
     );
     return { success: false, message: "Sistem sibuk, silakan simpan lagi." };
   } finally {
+    invalidateTransactionsCache_();
     lock.releaseLock();
   }
 }
@@ -752,6 +763,7 @@ function updateTransactionStatus(token, id, newStatus) {
     logError("updateTransactionStatus", e.message, id);
     return { success: false, message: "Sistem sibuk." };
   } finally {
+    invalidateTransactionsCache_();
     lock.releaseLock();
   }
 }
@@ -822,6 +834,7 @@ function lunasDanAmbil(token, id, metode) {
     logError("lunasDanAmbil", e.message, id);
     return { success: false, message: "Sistem sibuk." };
   } finally {
+    invalidateTransactionsCache_();
     lock.releaseLock();
   }
 }
@@ -846,6 +859,7 @@ function deleteTransaction(token, id) {
     logError("deleteTransaction", e.message, id);
     return { success: false, message: "Sistem sibuk." };
   } finally {
+    invalidateTransactionsCache_();
     lock.releaseLock();
   }
 }
@@ -1720,6 +1734,31 @@ function getDashboardBundle(token) {
       };
     } catch (e) {
       logError("getDashboardBundle", e.message);
+      return { success: false, message: "Gagal mengambil data dashboard: " + e.message };
+    }
+  });
+}
+
+// [OPT] Fast Bundle: hanya data yang sudah di-cache (settings, packages, activeShift)
+// UI render segera, lalu transactions + customers di-load terpisah secara paralel.
+// Estimasi: ~200-500ms vs ~2-5s untuk full bundle.
+function getDashboardBundleFast(token) {
+  return _perf("getDashboardBundleFast", function () {
+    const session = validateSession_(token);
+    try {
+      const packages = _perf("  └ getPackages", () => getPackages(token));
+      const settings = _perf("  └ getSettings", () => getSettings());
+      const activeShift = _perf("  └ getActiveShift_", () => getActiveShift_(session.username));
+      return {
+        success: true,
+        packages: packages,
+        settings: settings,
+        activeShift: activeShift,
+        username: session.username,
+        role: session.role,
+      };
+    } catch (e) {
+      logError("getDashboardBundleFast", e.message);
       return { success: false, message: "Gagal mengambil data dashboard: " + e.message };
     }
   });

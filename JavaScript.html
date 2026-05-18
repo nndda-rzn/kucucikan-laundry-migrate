@@ -752,16 +752,15 @@
       // [PERF] Hapus fetchCustomers() di sini — getDashboardBundle sudah memuat customers.
       // Tab Pelanggan akan render dari allCustomers saat user pertama kali buka tab itu.
 
-      // [OPT] WAVE 2: getDashboardBundle — 1 GAS call menggantikan 3 serial call
-      // (loadSettings + loadTransactions + fetchPaket) → getDashboardBundle
-      // Menghemat ~2-8 detik setiap login/reload sesi
+      // [OPT] WAVE 3: Progressive Dashboard Loading
+      // Phase 1: getDashboardBundleFast (~200-500ms) — render UI immediately
+      // Phase 2: getTransactions + getCustomers in parallel (~1-3s) — update stats
       showLoading(true);
       google.script.run
-        .withSuccessHandler(function(bundle) {
-          showLoading(false);
-          if (bundle && bundle.success) {
-            // Proses settings
-            const settingsData = bundle.settings;
+        .withSuccessHandler(function(fastBundle) {
+          if (fastBundle && fastBundle.success) {
+            // Phase 1: Process fast data (settings, packages, activeShift)
+            const settingsData = fastBundle.settings;
             if (settingsData) {
               settingsData._ts = Date.now();
               try {
@@ -769,21 +768,10 @@
               } catch(e) {}
               applySettingsToUI(settingsData);
             }
-            // Proses transaksi
-            const txData = bundle.transactions;
-            if (txData) {
-              allTransactions = txData;
-              transactionsCacheTime = Date.now();
-              updateOverviewStats();
-              updateRecentActivity();
-              const refreshEl = document.getElementById("lastRefresh");
-              if (refreshEl) refreshEl.innerText = "Diperbarui: " + new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
-            }
-            // Proses paket
-            const pkgData = bundle.packages;
+            const pkgData = fastBundle.packages;
             if (pkgData) {
               allPackages = pkgData;
-              packagesCacheTime = Date.now(); // [OPT] Catat waktu cache paket
+              packagesCacheTime = Date.now();
               const sel = document.getElementById("selectPaket");
               if (sel) {
                 let selHtml = '<option value="" disabled selected>-- Pilih Layanan --</option>';
@@ -796,39 +784,176 @@
                 sel.innerHTML = selHtml;
               }
             }
-            // Proses pelanggan dari bundle — tidak perlu fetchCustomers() terpisah
-            const custData = bundle.customers;
-            if (custData) {
-              allCustomers = custData;
-              customersCacheTime = Date.now();
-            }
-            if (bundle.activeShift !== undefined) {
-              currentShift = bundle.activeShift;
+            if (fastBundle.activeShift !== undefined) {
+              currentShift = fastBundle.activeShift;
               updateShiftBanner();
             }
+
+            // Phase 2: Load heavy data in parallel (transactions + customers)
+            showLoading(false);
+            google.script.run
+              .withSuccessHandler(function(txData) {
+                if (txData) {
+                  allTransactions = txData;
+                  transactionsCacheTime = Date.now();
+                  updateOverviewStats();
+                  updateRecentActivity();
+                  const refreshEl = document.getElementById("lastRefresh");
+                  if (refreshEl) refreshEl.innerText = "Diperbarui: " + new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
+                }
+              })
+              .getTransactions(currentUser.token);
+
+            google.script.run
+              .withSuccessHandler(function(custData) {
+                if (custData) {
+                  allCustomers = custData;
+                  customersCacheTime = Date.now();
+                }
+              })
+              .getCustomers(currentUser.token);
           } else {
-            // Fallback: panggil individual jika bundle gagal
-            loadSettings();
-            loadTransactions(true);
-            fetchPaket();
-            fetchCustomers(true);
-            google.script.run.withSuccessHandler(res => {
-              if (res && res.success) { currentShift = res.data; updateShiftBanner(); }
-            }).getActiveShiftAPI(currentUser.token);
+            // Fallback: panggil getDashboardBundle jika fast bundle gagal
+            showLoading(true);
+            google.script.run
+              .withSuccessHandler(function(bundle) {
+                showLoading(false);
+                if (bundle && bundle.success) {
+                  const settingsData = bundle.settings;
+                  if (settingsData) {
+                    settingsData._ts = Date.now();
+                    try {
+                      localStorage.setItem("l_premium_settings_cache", JSON.stringify(settingsData));
+                    } catch(e) {}
+                    applySettingsToUI(settingsData);
+                  }
+                  const txData = bundle.transactions;
+                  if (txData) {
+                    allTransactions = txData;
+                    transactionsCacheTime = Date.now();
+                    updateOverviewStats();
+                    updateRecentActivity();
+                    const refreshEl = document.getElementById("lastRefresh");
+                    if (refreshEl) refreshEl.innerText = "Diperbarui: " + new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
+                  }
+                  const pkgData = bundle.packages;
+                  if (pkgData) {
+                    allPackages = pkgData;
+                    packagesCacheTime = Date.now();
+                    const sel = document.getElementById("selectPaket");
+                    if (sel) {
+                      let selHtml = '<option value="" disabled selected>-- Pilih Layanan --</option>';
+                      for (let i = 0; i < pkgData.length; i++) {
+                        const p = pkgData[i];
+                        if (p.status === "Nonaktif") continue;
+                        const safeSat = escapeHTML(p.satuan || "Kg");
+                        selHtml += `<option value="${escapeHTML(p.nama)}" data-id="${escapeHTML(p.id)}" data-harga="${p.harga}" data-satuan="${safeSat}" data-durasi="${escapeHTML(p.durasi || 0)}">${escapeHTML(p.nama)} (Rp ${parseInt(p.harga).toLocaleString("id-ID")} / ${safeSat})</option>`;
+                      }
+                      sel.innerHTML = selHtml;
+                    }
+                  }
+                  const custData = bundle.customers;
+                  if (custData) {
+                    allCustomers = custData;
+                    customersCacheTime = Date.now();
+                  }
+                  if (bundle.activeShift !== undefined) {
+                    currentShift = bundle.activeShift;
+                    updateShiftBanner();
+                  }
+                } else {
+                  loadSettings();
+                  loadTransactions(true);
+                  fetchPaket();
+                  fetchCustomers(true);
+                  google.script.run.withSuccessHandler(res => {
+                    if (res && res.success) { currentShift = res.data; updateShiftBanner(); }
+                  }).getActiveShiftAPI(currentUser.token);
+                }
+              })
+              .withFailureHandler(function(err) {
+                showLoading(false);
+                loadSettings();
+                loadTransactions(true);
+                fetchPaket();
+                fetchCustomers(true);
+                google.script.run.withSuccessHandler(res => {
+                  if (res && res.success) { currentShift = res.data; updateShiftBanner(); }
+                }).getActiveShiftAPI(currentUser.token);
+              })
+              .getDashboardBundle(currentUser.token);
           }
         })
         .withFailureHandler(function(err) {
           showLoading(false);
-          // Fallback ke method lama jika bundle call gagal
-          loadSettings();
-          loadTransactions(true);
-          fetchPaket();
-          fetchCustomers(true);
-          google.script.run.withSuccessHandler(res => {
-            if (res && res.success) { currentShift = res.data; updateShiftBanner(); }
-          }).getActiveShiftAPI(currentUser.token);
+          // Fallback ke getDashboardBundle jika fast bundle call gagal
+          google.script.run
+            .withSuccessHandler(function(bundle) {
+              if (bundle && bundle.success) {
+                const settingsData = bundle.settings;
+                if (settingsData) {
+                  settingsData._ts = Date.now();
+                  try {
+                    localStorage.setItem("l_premium_settings_cache", JSON.stringify(settingsData));
+                  } catch(e) {}
+                  applySettingsToUI(settingsData);
+                }
+                const txData = bundle.transactions;
+                if (txData) {
+                  allTransactions = txData;
+                  transactionsCacheTime = Date.now();
+                  updateOverviewStats();
+                  updateRecentActivity();
+                  const refreshEl = document.getElementById("lastRefresh");
+                  if (refreshEl) refreshEl.innerText = "Diperbarui: " + new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
+                }
+                const pkgData = bundle.packages;
+                if (pkgData) {
+                  allPackages = pkgData;
+                  packagesCacheTime = Date.now();
+                  const sel = document.getElementById("selectPaket");
+                  if (sel) {
+                    let selHtml = '<option value="" disabled selected>-- Pilih Layanan --</option>';
+                    for (let i = 0; i < pkgData.length; i++) {
+                      const p = pkgData[i];
+                      if (p.status === "Nonaktif") continue;
+                      const safeSat = escapeHTML(p.satuan || "Kg");
+                      selHtml += `<option value="${escapeHTML(p.nama)}" data-id="${escapeHTML(p.id)}" data-harga="${p.harga}" data-satuan="${safeSat}" data-durasi="${escapeHTML(p.durasi || 0)}">${escapeHTML(p.nama)} (Rp ${parseInt(p.harga).toLocaleString("id-ID")} / ${safeSat})</option>`;
+                    }
+                    sel.innerHTML = selHtml;
+                  }
+                }
+                const custData = bundle.customers;
+                if (custData) {
+                  allCustomers = custData;
+                  customersCacheTime = Date.now();
+                }
+                if (bundle.activeShift !== undefined) {
+                  currentShift = bundle.activeShift;
+                  updateShiftBanner();
+                }
+              } else {
+                loadSettings();
+                loadTransactions(true);
+                fetchPaket();
+                fetchCustomers(true);
+                google.script.run.withSuccessHandler(res => {
+                  if (res && res.success) { currentShift = res.data; updateShiftBanner(); }
+                }).getActiveShiftAPI(currentUser.token);
+              }
+            })
+            .withFailureHandler(function(err2) {
+              loadSettings();
+              loadTransactions(true);
+              fetchPaket();
+              fetchCustomers(true);
+              google.script.run.withSuccessHandler(res => {
+                if (res && res.success) { currentShift = res.data; updateShiftBanner(); }
+              }).getActiveShiftAPI(currentUser.token);
+            })
+            .getDashboardBundle(currentUser.token);
         })
-        .getDashboardBundle(currentUser.token);
+        .getDashboardBundleFast(currentUser.token);
 
       // [OPT] Auto-refresh dashboard setiap 1 menit (multi-kasir sync)
       // [PERF] Smart polling: pause saat tab hidden, refresh ketika tab kembali aktif
