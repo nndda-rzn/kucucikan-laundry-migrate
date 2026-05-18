@@ -120,6 +120,18 @@ function invalidateTransactionsCache_() {
   try { CacheService.getScriptCache().remove("transactions_list"); } catch (e) {}
 }
 
+function invalidateKasCache_() {
+  try {
+    const cache = CacheService.getScriptCache();
+    const keys = cache.getAllKeys();
+    for (let i = 0; i < keys.length; i++) {
+      if (keys[i].startsWith("kas_harian_")) {
+        cache.remove(keys[i]);
+      }
+    }
+  } catch (e) {}
+}
+
 // [P0] Generate ID unik menggunakan Utilities.getUuid() — menghindari collision
 function generateId(prefix) {
   return prefix + "-" + Utilities.getUuid().replace(/-/g, "").substring(0, 12);
@@ -540,12 +552,23 @@ function parseSafeDate(rawDate) {
   return new Date().toISOString();
 }
 
-function getTransactions(token) {
+function getTransactions(token, clientHash) {
   validateSession_(token);
   try {
     // [OPT] Check cache first (60s TTL)
     const cached = CacheService.getScriptCache().get("transactions_list");
-    if (cached) return JSON.parse(cached);
+    if (cached) {
+      const result = JSON.parse(cached);
+      // [OPT] ETag support: compute hash, return noChange if match
+      if (clientHash && result.length > 0) {
+        const lastItem = result[result.length - 1];
+        const serverHash = result.length + "_" + lastItem.id + "_" + lastItem.tanggal;
+        if (clientHash === serverHash) {
+          return { noChange: true, hash: serverHash };
+        }
+      }
+      return result;
+    }
 
     const sheet = getSheet("transactions");
     const lastRow = sheet.getLastRow();
@@ -608,6 +631,16 @@ function getTransactions(token) {
 
     // [OPT] Cache result untuk 60 detik
     CacheService.getScriptCache().put("transactions_list", JSON.stringify(result), 60);
+
+    // [OPT] ETag support: compute hash, return with data
+    if (clientHash && result.length > 0) {
+      const lastItem = result[result.length - 1];
+      const serverHash = result.length + "_" + lastItem.id + "_" + lastItem.tanggal;
+      if (clientHash === serverHash) {
+        return { noChange: true, hash: serverHash };
+      }
+    }
+
     return result;
   } catch (e) {
     logError("getTransactions", e.message);
@@ -721,6 +754,7 @@ function createTransaction(token, data) {
     saveOrUpdateCustomer(data.kasir, data.customer, data.whatsapp || "", date);
     // [PERF] Invalidate cache shift summary — agar getKasHarian, getAllActiveShifts,
     // dan dashboard live summary refleksikan transaksi baru di window berikutnya.
+    invalidateKasCache_();
     if (activeShift) invalidateShiftSummaryCache_(activeShift.id);
     return {
       success: true,
@@ -835,6 +869,7 @@ function lunasDanAmbil(token, id, metode) {
     return { success: false, message: "Sistem sibuk." };
   } finally {
     invalidateTransactionsCache_();
+    invalidateKasCache_();
     lock.releaseLock();
   }
 }
@@ -1261,9 +1296,15 @@ function saveUangAwal(token, nominal, dateStr) {
 function getKasHarian(token, tanggalStr) {
   const session = validateSession_(token);
   try {
-    // [OPT] Hapus setupKasSheet_() — sheet sudah dibuat saat setupDatabase(), tidak perlu cek ulang di setiap read
+    // [OPT] Cache kas harian result (30s TTL)
     const targetDate = tanggalStr ? new Date(tanggalStr) : new Date();
     targetDate.setHours(0, 0, 0, 0);
+    const dateKey = targetDate.toISOString().split('T')[0];
+    const cacheKey = "kas_harian_" + dateKey + "_" + session.username;
+    const cached = CacheService.getScriptCache().get(cacheKey);
+    if (cached) return JSON.parse(cached);
+
+    // [OPT] Hapus setupKasSheet_() — sheet sudah dibuat saat setupDatabase(), tidak perlu cek ulang di setiap read
 
     // [SCOPE] Tentukan scope query pengeluaran:
     //  - "shift": kasir dengan shift aktif & filter = hari ini → tampilkan hanya
@@ -1474,7 +1515,7 @@ function getKasHarian(token, tanggalStr) {
       }
     }
 
-    return {
+    const result = {
       success: true,
       uang_awal: uangAwal,
       pengeluaran: pengeluaranList,
@@ -1488,6 +1529,13 @@ function getKasHarian(token, tanggalStr) {
       requires_shift: requiresShift, // true jika kasir hari ini perlu buka shift dulu
       active_shift_id: activeShift ? activeShift.id : null,
     };
+
+    // [OPT] Cache result untuk 30 detik
+    try {
+      CacheService.getScriptCache().put(cacheKey, JSON.stringify(result), 30);
+    } catch (e) {}
+
+    return result;
   } catch (e) {
     logError("getKasHarian", e.message);
     return { success: false, message: "Gagal mengambil data kas: " + e.message };
@@ -1520,6 +1568,7 @@ function savePengeluaran(token, keterangan, kategori, jumlah, dateStr) {
       const myShift = getActiveShift_(session.username);
       if (myShift) invalidateShiftSummaryCache_(myShift.id);
     } catch (e) { /* silent */ }
+    invalidateKasCache_();
     return { success: true, id: newId };
   } catch (e) {
     logError("savePengeluaran", e.message);
@@ -1542,6 +1591,7 @@ function deletePengeluaran(token, id) {
         // [PERF] Invalidate semua cache shift summary — pengeluaran lintas shift,
         // tidak tahu shift mana yang terdampak. Operasi delete jarang, aman flush all.
         try { _flushAllShiftSummaryCache_(); } catch (e) { /* silent */ }
+        invalidateKasCache_();
         return { success: true };
       }
     }
@@ -1960,6 +2010,7 @@ function openShift(token, modalAwal) {
     invalidateActiveShiftCacheForUser_(session.username);
     
     // [PERF] Kembalikan data shift agar client tidak perlu re-fetch dashboard bundle.
+    invalidateKasCache_();
     return {
       success: true,
       message: "Shift berhasil dibuka.",
@@ -2261,6 +2312,7 @@ function closeShift(token, shiftId, catatan) {
   } finally {
     invalidateActiveShiftsCache_();
     invalidateActiveShiftCacheForUser_(session.username);
+    invalidateKasCache_();
     lock.releaseLock();
   }
 }
