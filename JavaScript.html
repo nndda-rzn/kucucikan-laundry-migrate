@@ -26,6 +26,7 @@
   let currentShift = null; // Shift state
   let transactionsHash = null; // [OPT] ETag for incremental sync
   let isDashboardBootstrapping = false; // [PERF] Hindari RPC ganda saat initial render
+  let isTransactionsLoading = false; // [PERF] Cegah refresh transaksi dobel saat modal ditutup
 
   // [OPT] IndexedDB helper for persistent client-side cache
   const trxDB = {
@@ -383,21 +384,39 @@
 
   // 4. FUNGSI TAMPILAN & LOADING
   let loadingTimeout = null;
+  let loadingDelayTimer = null;
+  let loadingDepth = 0;
   function showLoading(s) {
     const ld = document.getElementById("loading");
     const timeoutMsg = document.getElementById("loadingTimeoutMsg");
+    if (!ld) return;
     if (s) {
-      ld.classList.remove("hidden");
-      ld.classList.add("flex");
-      if (timeoutMsg) timeoutMsg.classList.add("hidden");
-
-      loadingTimeout = setTimeout(() => {
-        if (timeoutMsg) timeoutMsg.classList.remove("hidden");
-      }, 15000);
+      loadingDepth++;
+      if (loadingDelayTimer || !ld.classList.contains("hidden")) return;
+      loadingDelayTimer = setTimeout(() => {
+        loadingDelayTimer = null;
+        if (loadingDepth <= 0) return;
+        ld.classList.remove("hidden");
+        ld.classList.add("flex");
+        if (timeoutMsg) timeoutMsg.classList.add("hidden");
+        loadingTimeout = setTimeout(() => {
+          if (timeoutMsg) timeoutMsg.classList.remove("hidden");
+        }, 15000);
+      }, 350);
     } else {
+      loadingDepth = Math.max(0, loadingDepth - 1);
+      if (loadingDepth > 0) return;
+      if (loadingDelayTimer) {
+        clearTimeout(loadingDelayTimer);
+        loadingDelayTimer = null;
+      }
       ld.classList.add("hidden");
       ld.classList.remove("flex");
-      if (loadingTimeout) clearTimeout(loadingTimeout);
+      if (timeoutMsg) timeoutMsg.classList.add("hidden");
+      if (loadingTimeout) {
+        clearTimeout(loadingTimeout);
+        loadingTimeout = null;
+      }
     }
   }
 
@@ -889,7 +908,6 @@
               .getCustomers(currentUser.token);
           } else {
             // Fallback: panggil getDashboardBundle jika fast bundle gagal
-            showLoading(true);
             google.script.run
               .withSuccessHandler(function(bundle) {
                 showLoading(false);
@@ -938,7 +956,7 @@
                   }
                 } else {
                   loadSettings();
-                  loadTransactions(true);
+                  loadTransactions(true, true);
                   fetchPaket();
                   fetchCustomers(true);
                   google.script.run.withSuccessHandler(res => {
@@ -949,7 +967,7 @@
               .withFailureHandler(function(err) {
                 showLoading(false);
                 loadSettings();
-                loadTransactions(true);
+                loadTransactions(true, true);
                 fetchPaket();
                 fetchCustomers(true);
                 google.script.run.withSuccessHandler(res => {
@@ -1009,7 +1027,7 @@
                 }
               } else {
                 loadSettings();
-                loadTransactions(true);
+                loadTransactions(true, true);
                 fetchPaket();
                 fetchCustomers(true);
                 google.script.run.withSuccessHandler(res => {
@@ -1019,7 +1037,7 @@
             })
             .withFailureHandler(function(err2) {
               loadSettings();
-              loadTransactions(true);
+              loadTransactions(true, true);
               fetchPaket();
               fetchCustomers(true);
               google.script.run.withSuccessHandler(res => {
@@ -1064,14 +1082,14 @@
         const onKas = kasEl && !kasEl.classList.contains("hidden");
         const onShift = shiftEl && !shiftEl.classList.contains("hidden");
 
-        if (onDash || onHist) loadTransactions(true);
+        if (onDash || onHist) loadTransactions(true, true);
         // [SYNC] Refresh Manajemen Kas — multi-device sync
         if (onKas) {
-          try { fetchKasHarian(); } catch (e) {}
+          try { fetchKasHarian(true); } catch (e) {}
         }
         // [SYNC] Refresh Manajemen Shift — admin lihat live status kasir
         if (onShift && currentUser && currentUser.role === "admin") {
-          try { loadShiftAdminTab(_shiftAdminActiveTab || "aktif"); } catch (e) {}
+          try { loadShiftAdminTab(_shiftAdminActiveTab || "aktif", true); } catch (e) {}
         }
       };
       autoRefreshInterval = setInterval(refreshIfRelevant, currentPollingInterval);
@@ -1371,7 +1389,7 @@
     }
 
     if (name === "laporan") {
-      ensureLazyScripts(function() { generateReport("today"); });
+      ensureLazyScripts(function() { generateReport("today", true); });
       // [SHIFT] Reveal & auto-load Rekap Shift untuk admin
       const shiftWrap = document.getElementById("adminShiftRekapWrap");
       if (shiftWrap) {
@@ -1834,7 +1852,7 @@
           showToast("Transaksi berhasil dihapus!");
           // [FIX] Invalidasi cache + auto-refresh agar UI langsung ter-update
           transactionsCacheTime = 0;
-          loadTransactions(true);
+          loadTransactions(true, true);
         } else {
           showToast(res.message || "Gagal menghapus transaksi!", "error");
         }
@@ -1847,7 +1865,7 @@
   }
 
   // 8. DASHBOARD & HISTORY
-  function loadTransactions(forceRefresh) {
+  function loadTransactions(forceRefresh, silentRefresh) {
     // [P1] Client-side cache — skip server call jika data masih fresh
     const now = Date.now();
     if (
@@ -1864,6 +1882,8 @@
       return;
     }
 
+    if (isTransactionsLoading) return;
+
     // [PERF] Hydrate dari IndexedDB → sessionStorage → fresh fetch
     if (!forceRefresh && allTransactions.length === 0) {
       // Try IndexedDB first (persistent across browser sessions)
@@ -1875,9 +1895,10 @@
           updateOverviewStats();
           updateRecentActivity();
           // Still fetch fresh in background
-          loadTransactions(true);
+          loadTransactions(true, true);
         } else {
           // Fallback to sessionStorage
+          let hasSessionCache = false;
           try {
             const ssCached = sessionStorage.getItem("trx_cache_v1");
             if (ssCached) {
@@ -1887,29 +1908,33 @@
                 transactionsCacheTime = parsed._ts;
                 updateOverviewStats();
                 updateRecentActivity();
+                hasSessionCache = true;
               }
             }
           } catch (e) { /* ignore */ }
-          loadTransactions(true);
+          loadTransactions(true, hasSessionCache || silentRefresh === true);
         }
       }).catch(() => {
-        loadTransactions(true);
+        loadTransactions(true, silentRefresh === true);
       });
       return;
     }
 
     // [P0] Silent refresh — hanya tampilkan loading global saat pertama kali (data kosong)
     const isFirstLoad = allTransactions.length === 0;
-    if (isFirstLoad) showLoading(true);
+    const showGlobalLoading = isFirstLoad && silentRefresh !== true;
+    if (showGlobalLoading) showLoading(true);
 
     const refreshEl = document.getElementById("lastRefresh");
     if (refreshEl && !isFirstLoad) refreshEl.innerText = "Memperbarui...";
 
+    isTransactionsLoading = true;
     google.script.run
       .withSuccessHandler(function (data) {
-        if (isFirstLoad) showLoading(false);
+        isTransactionsLoading = false;
+        if (showGlobalLoading) showLoading(false);
         if (!data) {
-          showToast("Data transaksi kosong dari server.", "error");
+          if (!silentRefresh) showToast("Data transaksi kosong dari server.", "error");
           return;
         }
 
@@ -1963,9 +1988,12 @@
           filterHistory();
       })
       .withFailureHandler(function (err) {
-        if (isFirstLoad) showLoading(false);
-        showToast("Gagal memuat transaksi: " + err.message, "error");
-        if (refreshEl) refreshEl.innerText = "Gagal memperbarui";
+        isTransactionsLoading = false;
+        if (showGlobalLoading) showLoading(false);
+        if (!silentRefresh) {
+          showToast("Gagal memuat transaksi: " + err.message, "error");
+          if (refreshEl) refreshEl.innerText = "Gagal memperbarui";
+        }
       })
       .getTransactions(currentUser.token, transactionsHash);
   }
@@ -2576,7 +2604,7 @@
           }
           closePaymentModal();
           updateOverviewStats();
-          loadTransactions(true);
+          loadTransactions(true, true);
           refreshKasIfVisible();
           if (tx && tx.whatsapp && tx.whatsapp.toString().trim() !== "")
             showWaModal(tx, "DIAMBIL (LUNAS)");
@@ -3273,7 +3301,7 @@ Terima kasih.`;
           resetFormTransaksi();
 
           // [Pendekatan 1: Silent Re-fetching] Refresh data secara background
-          loadTransactions(true);
+          loadTransactions(true, true);
           fetchCustomers();
           refreshKasIfVisible();
 
@@ -3485,7 +3513,13 @@ Terima kasih.`;
 
   // 11. LAPORAN & EXPORT
   function generateReport(type, isBackground = false) {
-    if (!isBackground) showLoading(true);
+    const showGlobalLoading = !isBackground;
+    if (showGlobalLoading) {
+      showLoading(true);
+    } else {
+      const avgEl = document.getElementById("avg-rev");
+      if (avgEl) avgEl.innerText = "Memuat...";
+    }
     currentReportType = type || currentReportType;
     
     const now = new Date();
@@ -3538,7 +3572,7 @@ Terima kasih.`;
       const endVal = document.getElementById("reportEnd").value;
       if (!startVal && !endVal) {
         showToast("Pilih rentang tanggal terlebih dahulu!", "error");
-        showLoading(false);
+        if (showGlobalLoading) showLoading(false);
         return;
       }
       if (startVal) {
@@ -3557,7 +3591,7 @@ Terima kasih.`;
     // Mengeliminasi nested GAS call yang sebelumnya menyebabkan 2 round-trip serial (~2-10 detik)
     google.script.run
       .withSuccessHandler(function (combined) {
-        showLoading(false);
+        if (showGlobalLoading) showLoading(false);
         if (!combined || !combined.success) {
           showToast("Gagal mengambil data laporan.", "error");
           return;
@@ -3717,7 +3751,7 @@ Terima kasih.`;
         }
       })
       .withFailureHandler(function (err) {
-        showLoading(false);
+        if (showGlobalLoading) showLoading(false);
         showToast("Gagal mengambil data laporan: " + err.message, "error");
       })
       .getReportAndKasData(currentUser.token, startDate, endDate);
@@ -4830,17 +4864,17 @@ Terima kasih.`;
   function refreshKasIfVisible() {
     const sectionKas = document.getElementById("section-kas");
     if (sectionKas && !sectionKas.classList.contains("hidden")) {
-      try { fetchKasHarian(); } catch (e) { /* swallow */ }
+      try { fetchKasHarian(true); } catch (e) { /* swallow */ }
     }
   }
 
-  function fetchKasHarian() {
+  function fetchKasHarian(silentRefresh) {
     const filterInput = document.getElementById("kasDateFilter");
     const dateStr = filterInput ? filterInput.value : "";
 
     // [OPT] Ganti full-screen loading overlay dengan inline indicator — UI tidak terblokir
     const kasCard = document.getElementById("kasUangAwal");
-    if (kasCard) kasCard.innerText = "Memuat...";
+    if (kasCard && !silentRefresh) kasCard.innerText = "Memuat...";
     google.script.run
       .withSuccessHandler(function (res) {
         if (res && res.success) {
@@ -4860,10 +4894,18 @@ Terima kasih.`;
 
           renderPengeluaranList(res.pengeluaran);
         } else {
+          if (silentRefresh) {
+            console.warn("[fetchKasHarian] silent refresh failed:", res ? res.message : "empty response");
+            return;
+          }
           showToast(res ? res.message : "Gagal mengambil data kas.", "error");
         }
       })
       .withFailureHandler(function (err) {
+        if (silentRefresh) {
+          console.warn("[fetchKasHarian] silent refresh error:", err);
+          return;
+        }
         if (kasCard) kasCard.innerText = "Error";
         showToast("Error koneksi: " + err.message, "error");
       })
@@ -4985,23 +5027,24 @@ Terima kasih.`;
     
     const filterInput = document.getElementById("kasDateFilter");
     const dateStr = filterInput ? filterInput.value : "";
+    const btn = document.getElementById("btnSavePengeluaran");
     
-    showLoading(true);
+    setBtnLoading(btn, true, "Menyimpan...");
     google.script.run
       .withSuccessHandler(function(res) {
-        showLoading(false);
+        setBtnLoading(btn, false);
         if (res && res.success) {
           showToast("Pengeluaran berhasil ditambahkan!");
           document.getElementById("inputPengeluaranKet").value = "";
           document.getElementById("inputPengeluaranJumlah").value = "";
-          fetchKasHarian();
+          fetchKasHarian(true);
           // [OPT] Hapus loadTransactions(true) — data transaksi tidak berubah saat catat pengeluaran
         } else {
           showToast(res ? res.message : "Gagal menyimpan pengeluaran.", "error");
         }
       })
       .withFailureHandler(function(err) {
-        showLoading(false);
+        setBtnLoading(btn, false);
         showToast("Error koneksi: " + err.message, "error");
       })
       .savePengeluaran(currentUser.token, keterangan, kategori, jumlah, dateStr);
@@ -5047,7 +5090,7 @@ Terima kasih.`;
         showLoading(false);
         if (res && res.success) {
           showToast("Pengeluaran berhasil dihapus!");
-          fetchKasHarian();
+          fetchKasHarian(true);
           // [OPT] Hapus loadTransactions(true) — data transaksi tidak berubah saat hapus pengeluaran
         } else {
           showToast(res ? res.message : "Gagal menghapus.", "error");
@@ -5147,7 +5190,7 @@ Terima kasih.`;
           // — scope berubah dari "none" → "shift" + reset visual pengeluaran
           const sectionKas = document.getElementById("section-kas");
           if (sectionKas && !sectionKas.classList.contains("hidden")) {
-            fetchKasHarian();
+            fetchKasHarian(true);
           }
         } else {
           showToast(res ? res.message : "Gagal membuka shift", "error");
@@ -5197,7 +5240,7 @@ Terima kasih.`;
           // scope berubah dari "shift" → "none", form akan disabled + banner muncul
           const sectionKas = document.getElementById("section-kas");
           if (sectionKas && !sectionKas.classList.contains("hidden")) {
-            fetchKasHarian();
+            fetchKasHarian(true);
           }
 
           if (res.summary) {
@@ -5354,7 +5397,7 @@ Terima kasih.`;
   let _shiftAdminAktifCache = [];
   let _shiftAdminRiwayatCache = [];
 
-  function loadShiftAdminTab(tab) {
+  function loadShiftAdminTab(tab, silentRefresh) {
     if (!currentUser || currentUser.role !== "admin") return;
     _shiftAdminActiveTab = tab || "aktif";
 
@@ -5381,7 +5424,7 @@ Terima kasih.`;
     if (toolbar) toolbar.classList.toggle("hidden", _shiftAdminActiveTab !== "riwayat");
 
     const body = document.getElementById("shiftAdminBody");
-    if (body) {
+    if (body && !silentRefresh) {
       // [P1-3] Pakai skeleton helper terpadu
       renderListSkeleton(body, 3);
     }
@@ -5394,12 +5437,12 @@ Terima kasih.`;
             updateShiftAdminStatCards(_shiftAdminAktifCache);
             renderShiftAdminAktif(_shiftAdminAktifCache);
           } else {
-            if (body)
+            if (body && (!silentRefresh || _shiftAdminAktifCache.length === 0))
               body.innerHTML = `<p class="text-sm text-red-500 text-center py-8">${escapeHTML(res ? res.message : "Gagal memuat shift aktif")}</p>`;
           }
         })
         .withFailureHandler(function (err) {
-          if (body)
+          if (body && (!silentRefresh || _shiftAdminAktifCache.length === 0))
             body.innerHTML = `<p class="text-sm text-red-500 text-center py-8">Error: ${escapeHTML(err.message)}</p>`;
         })
         .getAllActiveShifts(currentUser.token);
@@ -5413,12 +5456,12 @@ Terima kasih.`;
             _shiftAdminRiwayatCache = res.data || [];
             renderShiftAdminRiwayat(_shiftAdminRiwayatCache);
           } else {
-            if (body)
+            if (body && (!silentRefresh || _shiftAdminRiwayatCache.length === 0))
               body.innerHTML = `<p class="text-sm text-red-500 text-center py-8">${escapeHTML(res ? res.message : "Gagal memuat riwayat")}</p>`;
           }
         })
         .withFailureHandler(function (err) {
-          if (body)
+          if (body && (!silentRefresh || _shiftAdminRiwayatCache.length === 0))
             body.innerHTML = `<p class="text-sm text-red-500 text-center py-8">Error: ${escapeHTML(err.message)}</p>`;
         })
         .getShiftHistory(currentUser.token, start.toISOString(), end.toISOString());
