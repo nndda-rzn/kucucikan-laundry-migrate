@@ -22,6 +22,7 @@
   const CUSTOMERS_CACHE_TTL = 120000; // 2 menit TTL
   let packagesCacheTime = 0; // [OPT] Client-side package cache
   const PACKAGES_CACHE_TTL = 300000; // 5 menit TTL — paket jarang berubah
+  const PACKAGES_CLIENT_CACHE_KEY = "l_premium_packages_cache";
   let autoRefreshInterval = null; // [OPT] Auto-refresh polling
   let draftSaveInterval = null; // [OPT] Draft auto-save
   let pendingPelunasanId = null; // [FIX] Deklarasi eksplisit
@@ -145,6 +146,47 @@
       return response.data;
     }
     return Array.isArray(response) ? response : [];
+  }
+
+  function renderPackageSelect(pkgData) {
+    const sel = document.getElementById("selectPaket");
+    if (!sel || !pkgData) return;
+    let selHtml = '<option value="" disabled selected>-- Pilih Layanan --</option>';
+    for (let i = 0; i < pkgData.length; i++) {
+      const p = pkgData[i];
+      if (p.status === "Nonaktif") continue;
+      const safeSat = escapeHTML(p.satuan || "Kg");
+      selHtml += `<option value="${escapeHTML(p.nama)}" data-id="${escapeHTML(p.id)}" data-harga="${p.harga}" data-satuan="${safeSat}" data-durasi="${escapeHTML(p.durasi || 0)}">${escapeHTML(p.nama)} (Rp ${parseInt(p.harga).toLocaleString("id-ID")} / ${safeSat})</option>`;
+    }
+    sel.innerHTML = selHtml;
+  }
+
+  function persistPackagesClientCache(pkgData) {
+    try {
+      localStorage.setItem(PACKAGES_CLIENT_CACHE_KEY, JSON.stringify({ data: pkgData || [], _ts: Date.now() }));
+    } catch (e) {}
+  }
+
+  function setPackagesData(pkgData, persist) {
+    allPackages = pkgData || [];
+    packagesCacheTime = Date.now();
+    renderPackageSelect(allPackages);
+    if (persist !== false) persistPackagesClientCache(allPackages);
+  }
+
+  function hydratePackagesFromClientCache() {
+    try {
+      const cachedRaw = localStorage.getItem(PACKAGES_CLIENT_CACHE_KEY);
+      if (!cachedRaw) return false;
+      const cached = JSON.parse(cachedRaw);
+      if (!cached || !cached.data || Date.now() - (cached._ts || 0) > PACKAGES_CACHE_TTL) return false;
+      allPackages = cached.data;
+      packagesCacheTime = cached._ts || Date.now();
+      renderPackageSelect(allPackages);
+      return true;
+    } catch (e) {
+      return false;
+    }
   }
 
   window.perfStats = function () {
@@ -786,6 +828,7 @@
         }
       }
     } catch (e) { /* ignore */ }
+    const hasFreshPackagesCache = hydratePackagesFromClientCache();
     setTimeout(() => {
       // [FIX] Reveal dashboard SEBELUM panggil fungsi lain — agar tidak blank
       // jika ada satu fungsi yang error
@@ -865,21 +908,7 @@
               applySettingsToUI(settingsData);
             }
             const pkgData = fastBundle.packages;
-            if (pkgData) {
-              allPackages = pkgData;
-              packagesCacheTime = Date.now();
-              const sel = document.getElementById("selectPaket");
-              if (sel) {
-                let selHtml = '<option value="" disabled selected>-- Pilih Layanan --</option>';
-                for (let i = 0; i < pkgData.length; i++) {
-                  const p = pkgData[i];
-                  if (p.status === "Nonaktif") continue;
-                  const safeSat = escapeHTML(p.satuan || "Kg");
-                  selHtml += `<option value="${escapeHTML(p.nama)}" data-id="${escapeHTML(p.id)}" data-harga="${p.harga}" data-satuan="${safeSat}" data-durasi="${escapeHTML(p.durasi || 0)}">${escapeHTML(p.nama)} (Rp ${parseInt(p.harga).toLocaleString("id-ID")} / ${safeSat})</option>`;
-                }
-                sel.innerHTML = selHtml;
-              }
-            }
+            if (pkgData) setPackagesData(pkgData);
             if (fastBundle.activeShift !== undefined) {
               currentShift = fastBundle.activeShift;
               updateShiftBanner();
@@ -932,21 +961,7 @@
                     if (refreshEl) refreshEl.innerText = "Diperbarui: " + new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
                   }
                   const pkgData = bundle.packages;
-                  if (pkgData) {
-                    allPackages = pkgData;
-                    packagesCacheTime = Date.now();
-                    const sel = document.getElementById("selectPaket");
-                    if (sel) {
-                      let selHtml = '<option value="" disabled selected>-- Pilih Layanan --</option>';
-                      for (let i = 0; i < pkgData.length; i++) {
-                        const p = pkgData[i];
-                        if (p.status === "Nonaktif") continue;
-                        const safeSat = escapeHTML(p.satuan || "Kg");
-                        selHtml += `<option value="${escapeHTML(p.nama)}" data-id="${escapeHTML(p.id)}" data-harga="${p.harga}" data-satuan="${safeSat}" data-durasi="${escapeHTML(p.durasi || 0)}">${escapeHTML(p.nama)} (Rp ${parseInt(p.harga).toLocaleString("id-ID")} / ${safeSat})</option>`;
-                      }
-                      sel.innerHTML = selHtml;
-                    }
-                  }
+                  if (pkgData) setPackagesData(pkgData);
                   const custData = bundle.customers;
                   if (custData) {
                     allCustomers = custData;
@@ -1003,21 +1018,7 @@
                   if (refreshEl) refreshEl.innerText = "Diperbarui: " + new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
                 }
                 const pkgData = bundle.packages;
-                if (pkgData) {
-                  allPackages = pkgData;
-                  packagesCacheTime = Date.now();
-                  const sel = document.getElementById("selectPaket");
-                  if (sel) {
-                    let selHtml = '<option value="" disabled selected>-- Pilih Layanan --</option>';
-                    for (let i = 0; i < pkgData.length; i++) {
-                      const p = pkgData[i];
-                      if (p.status === "Nonaktif") continue;
-                      const safeSat = escapeHTML(p.satuan || "Kg");
-                      selHtml += `<option value="${escapeHTML(p.nama)}" data-id="${escapeHTML(p.id)}" data-harga="${p.harga}" data-satuan="${safeSat}" data-durasi="${escapeHTML(p.durasi || 0)}">${escapeHTML(p.nama)} (Rp ${parseInt(p.harga).toLocaleString("id-ID")} / ${safeSat})</option>`;
-                    }
-                    sel.innerHTML = selHtml;
-                  }
-                }
+                if (pkgData) setPackagesData(pkgData);
                 const custData = bundle.customers;
                 if (custData) {
                   allCustomers = custData;
@@ -1048,7 +1049,7 @@
             })
             .getDashboardBundle(currentUser.token);
         })
-        .getDashboardBundleFast(currentUser.token);
+        .getDashboardBundleFast(currentUser.token, hasFreshPackagesCache);
 
       // [OPT] Auto-refresh dashboard dengan adaptive interval (multi-kasir sync)
       // [PERF] Smart polling: pause saat tab hidden, adaptive interval saat idle
@@ -4141,37 +4142,13 @@ Terima kasih.`;
       allPackages.length > 0 &&
       now - packagesCacheTime < PACKAGES_CACHE_TTL
     ) {
-      const sel = document.getElementById("selectPaket");
-      if (sel) {
-        let selHtml =
-          '<option value="" disabled selected>-- Pilih Layanan --</option>';
-        for (let i = 0; i < allPackages.length; i++) {
-          const p = allPackages[i];
-          if (p.status === "Nonaktif") continue;
-          const safeSat = escapeHTML(p.satuan || "Kg");
-          selHtml += `<option value="${escapeHTML(p.nama)}" data-id="${escapeHTML(p.id)}" data-harga="${p.harga}" data-satuan="${safeSat}" data-durasi="${escapeHTML(p.durasi || 0)}">${escapeHTML(p.nama)} (Rp ${parseInt(p.harga).toLocaleString("id-ID")} / ${safeSat})</option>`;
-        }
-        sel.innerHTML = selHtml;
-      }
+      renderPackageSelect(allPackages);
       renderPaketGrid(allPackages);
       return;
     }
     google.script.run
       .withSuccessHandler(function (data) {
-        allPackages = data || [];
-        packagesCacheTime = Date.now();
-        const sel = document.getElementById("selectPaket");
-        if (!sel) return;
-        // Hanya isi dropdown transaksi dengan layanan AKTIF
-        let selHtml =
-          '<option value="" disabled selected>-- Pilih Layanan --</option>';
-        for (let i = 0; i < allPackages.length; i++) {
-          const p = allPackages[i];
-          if (p.status === "Nonaktif") continue;
-          const safeSat = escapeHTML(p.satuan || "Kg");
-          selHtml += `<option value="${escapeHTML(p.nama)}" data-id="${escapeHTML(p.id)}" data-harga="${p.harga}" data-satuan="${safeSat}" data-durasi="${escapeHTML(p.durasi || 0)}">${escapeHTML(p.nama)} (Rp ${parseInt(p.harga).toLocaleString("id-ID")} / ${safeSat})</option>`;
-        }
-        sel.innerHTML = selHtml;
+        setPackagesData(data || []);
         renderPaketGrid(allPackages);
       })
       .withFailureHandler(function (err) {
@@ -4360,12 +4337,16 @@ Terima kasih.`;
       .withSuccessHandler(function (res) {
         if (res.success) {
           showToast("Status layanan diperbarui!");
+          persistPackagesClientCache(allPackages);
+          renderPackageSelect(allPackages);
           // UI sudah benar, tidak perlu fetchPaket() lagi
         } else {
           showToast("Gagal mengubah status.", "error");
           // Rollback optimistic update
           if (pkgIndex !== -1 && originalStatus !== null) {
             allPackages[pkgIndex].status = originalStatus;
+            persistPackagesClientCache(allPackages);
+            renderPackageSelect(allPackages);
             filterPaketList();
           }
         }
@@ -4375,6 +4356,8 @@ Terima kasih.`;
         // Rollback optimistic update
         if (pkgIndex !== -1 && originalStatus !== null) {
           allPackages[pkgIndex].status = originalStatus;
+          persistPackagesClientCache(allPackages);
+          renderPackageSelect(allPackages);
           filterPaketList();
         }
       })
@@ -4502,12 +4485,16 @@ Terima kasih.`;
       .withSuccessHandler(function (res) {
         if (res.success) {
           showToast("Layanan dihapus!");
+          persistPackagesClientCache(allPackages);
+          renderPackageSelect(allPackages);
           // UI sudah ter-update, tidak perlu fetchPaket()
         } else {
           showToast("Gagal menghapus!", "error");
           // Rollback
           if (removedPkg !== null && removedIdx !== -1) {
             allPackages.splice(removedIdx, 0, removedPkg);
+            persistPackagesClientCache(allPackages);
+            renderPackageSelect(allPackages);
             filterPaketList();
           }
         }
@@ -4517,6 +4504,8 @@ Terima kasih.`;
         // Rollback
         if (removedPkg !== null && removedIdx !== -1) {
           allPackages.splice(removedIdx, 0, removedPkg);
+          persistPackagesClientCache(allPackages);
+          renderPackageSelect(allPackages);
           filterPaketList();
         }
       })

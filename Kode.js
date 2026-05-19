@@ -1073,10 +1073,14 @@ function getPackages(token) {
     try { return JSON.parse(cached); } catch(e) {}
   }
   const sheet = getSheet("packages");
-  const rawData = sheet.getDataRange().getValues();
-  if (rawData.length <= 1) return [];
+  const lastRow = sheet.getLastRow();
+  if (lastRow <= 1) {
+    try { cache.put(cacheKey, "[]", 600); } catch(e) {}
+    return [];
+  }
+  // Baca hanya 7 kolom yang dipakai, bukan getDataRange seluruh sheet.
+  const rawData = sheet.getRange(2, 1, lastRow - 1, 7).getValues();
   const result = rawData
-    .slice(1)
     .filter((r) => r.join("").trim() !== "")
     .map((r) => ({
       id: r[0],
@@ -1087,7 +1091,10 @@ function getPackages(token) {
       kategori: String(r[5] || ""),
       status: String(r[6] || "Aktif"),
     }));
-  try { cache.put(cacheKey, JSON.stringify(result), 600); } catch(e) {}
+  try {
+    const payload = JSON.stringify(result);
+    if (payload.length < 95000) cache.put(cacheKey, payload, 600);
+  } catch(e) {}
   return result;
 }
 
@@ -1937,16 +1944,17 @@ function getDashboardBundle(token) {
 // [OPT] Fast Bundle: hanya data yang sudah di-cache (settings, packages, activeShift)
 // UI render segera, lalu transactions + customers di-load terpisah secara paralel.
 // Estimasi: ~200-500ms vs ~2-5s untuk full bundle.
-function getDashboardBundleFast(token) {
+function getDashboardBundleFast(token, skipPackages) {
   return _perf("getDashboardBundleFast", function () {
     const session = validateSession_(token);
     try {
-      const packages = _perf("  └ getPackages", () => getPackages(token));
+      const packages = skipPackages ? null : _perf("  └ getPackages", () => getPackages(token));
       const settings = _perf("  └ getSettings", () => getSettings());
       const activeShift = _perf("  └ getActiveShift_", () => getActiveShift_(session.username));
       return {
         success: true,
         packages: packages,
+        packagesSkipped: !!skipPackages,
         settings: settings,
         activeShift: activeShift,
         username: session.username,
