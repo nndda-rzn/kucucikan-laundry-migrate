@@ -79,6 +79,34 @@
     flex-shrink: 0;
   }
 
+  button:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible,
+  [tabindex]:focus-visible {
+    outline: 3px solid rgba(37, 99, 235, 0.35);
+    outline-offset: 2px;
+  }
+
+  #recentActivity > div,
+  #tableHistory > div,
+  #tableCustomers > div,
+  #listPaket > div {
+    content-visibility: auto;
+    contain-intrinsic-size: 96px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      scroll-behavior: auto !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+
   @media print {
     body * {
       visibility: hidden;

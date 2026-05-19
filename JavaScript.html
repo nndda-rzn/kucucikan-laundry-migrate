@@ -13,6 +13,8 @@
   let editingCustomerId = null;
   let currentPaketFilter = "Semua";
   let historyRenderLimit = 30;
+  const CUSTOMER_PAGE_SIZE = 80;
+  let customerRenderLimit = CUSTOMER_PAGE_SIZE;
   let isSubmitting = false; // [P0] Double-submit prevention
   let transactionsCacheTime = 0; // [P1] Client-side transaction cache
   const TRX_CACHE_TTL = 60000; // 1 menit TTL
@@ -1404,6 +1406,7 @@
     if (name === "transaksi") restoreDraft();
     if (name === "pelanggan") {
       document.getElementById("searchCustomerDB").value = "";
+      customerRenderLimit = CUSTOMER_PAGE_SIZE;
       fetchCustomers();
     }
     if (name === "pegawai") {
@@ -1612,6 +1615,9 @@
       return;
     }
 
+    const visibleLimit = Math.min(customerRenderLimit, data.length);
+    const visibleData = data.slice(0, visibleLimit);
+
     // [OPT] Build Hash Map O(M) untuk transaksi agar tidak terjadi O(N*M) loop
     let trxMap = {};
     if (typeof allTransactions !== "undefined" && allTransactions.length > 0) {
@@ -1628,8 +1634,8 @@
     }
 
     let htmlString = "";
-    for (let i = 0; i < data.length; i++) {
-      const c = data[i];
+    for (let i = 0; i < visibleData.length; i++) {
+      const c = visibleData[i];
       const d = new Date(c.terakhir_order);
       const dateStr = isNaN(d)
         ? "-"
@@ -1708,10 +1714,25 @@
                     </div>
                 </div>`;
     }
+    if (visibleLimit < data.length) {
+      const remaining = data.length - visibleLimit;
+      const nextCount = Math.min(CUSTOMER_PAGE_SIZE, remaining);
+      htmlString += `
+        <div class="bg-white/70 p-4 rounded-2xl border border-dashed border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <p class="text-sm font-black text-slate-700">Menampilkan ${visibleLimit} dari ${data.length} pelanggan</p>
+            <p class="text-xs text-slate-400 font-medium">Daftar dibatasi bertahap agar halaman tetap ringan di perangkat kasir.</p>
+          </div>
+          <button onclick="loadMoreCustomers()" class="min-h-[44px] px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-black transition-colors active:scale-95 cursor-pointer">
+            Tampilkan ${nextCount} Lagi
+          </button>
+        </div>`;
+    }
     cont.innerHTML = htmlString;
   }
 
-  function filterCustomerList() {
+  function filterCustomerList(resetLimit = true) {
+    if (resetLimit) customerRenderLimit = CUSTOMER_PAGE_SIZE;
     const val = document.getElementById("searchCustomerDB").value.toLowerCase();
     const filtered = [];
     for (let i = 0; i < allCustomers.length; i++) {
@@ -1723,6 +1744,11 @@
         filtered.push(allCustomers[i]);
     }
     renderCustomerGrid(filtered);
+  }
+
+  function loadMoreCustomers() {
+    customerRenderLimit += CUSTOMER_PAGE_SIZE;
+    filterCustomerList(false);
   }
   function editCustomer(id, nama, wa) {
     editingCustomerId = id;
@@ -2043,6 +2069,19 @@
 
     // Render UI
     const container = document.getElementById("dynamicDashboardCards");
+    if (!container) return;
+    const statsKey = [
+      isKasir ? "kasir" : "admin",
+      rev,
+      allTransactions.length,
+      prosesCount,
+      siapDiambilCount,
+      targetHariIni,
+    ].join("|");
+    if (container.dataset.statsKey === statsKey && container.children.length > 0) {
+      return;
+    }
+    container.dataset.statsKey = statsKey;
 
     if (isKasir) {
       // VIEW KASIR
@@ -2117,7 +2156,10 @@
 
   function updateRecentActivity() {
     const container = document.getElementById("recentActivity");
+    if (!container) return;
     if (allTransactions.length === 0) {
+      if (container.dataset.activityKey === "empty") return;
+      container.dataset.activityKey = "empty";
       container.innerHTML = `<div class="bg-white p-6 rounded-[1.5rem] text-center border border-slate-100 text-xs font-bold text-slate-400">Belum ada aktivitas.</div>`;
       return;
     }
@@ -2129,6 +2171,14 @@
         return (isNaN(db) ? 0 : db) - (isNaN(da) ? 0 : da);
       })
       .slice(0, 5);
+
+    const activityKey = recent
+      .map((tr) => [tr.id, tr.status, tr.status_pembayaran, tr.total, tr.tanggal_pelunasan || ""].join(":"))
+      .join("|");
+    if (container.dataset.activityKey === activityKey && container.children.length > 0) {
+      return;
+    }
+    container.dataset.activityKey = activityKey;
 
     let htmlString = "";
     for (let i = 0; i < recent.length; i++) {
