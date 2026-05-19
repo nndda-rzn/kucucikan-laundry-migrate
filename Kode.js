@@ -116,32 +116,50 @@ function invalidatePriceMapCache_() {
   try { CacheService.getScriptCache().remove(PRICE_MAP_CACHE_KEY); } catch (e) {}
 }
 
+const TRANSACTIONS_VERSION_KEY = "transactions_cache_version";
+const KAS_CACHE_VERSION_KEY = "kas_cache_version";
+const REPORT_CACHE_VERSION_KEY = "report_cache_version";
+const CACHE_VERSION_TTL = 21600; // 6 jam, batas maksimum CacheService
+const _cacheVersionMem = {};
+
+function getCacheVersion_(key) {
+  if (_cacheVersionMem[key]) return _cacheVersionMem[key];
+  try {
+    const cache = CacheService.getScriptCache();
+    const cached = cache.get(key);
+    if (cached) {
+      _cacheVersionMem[key] = cached;
+      return cached;
+    }
+    const props = PropertiesService.getScriptProperties();
+    const value = props.getProperty(key) || "0";
+    _cacheVersionMem[key] = value;
+    try { cache.put(key, value, CACHE_VERSION_TTL); } catch (e) {}
+    return value;
+  } catch (e) {
+    return "0";
+  }
+}
+
+function bumpCacheVersion_(key) {
+  const value = Date.now() + "_" + Math.floor(Math.random() * 1000000);
+  _cacheVersionMem[key] = value;
+  try { PropertiesService.getScriptProperties().setProperty(key, value); } catch (e) {}
+  try { CacheService.getScriptCache().put(key, value, CACHE_VERSION_TTL); } catch (e) {}
+  return value;
+}
+
 function invalidateTransactionsCache_() {
+  bumpCacheVersion_(TRANSACTIONS_VERSION_KEY);
   try { CacheService.getScriptCache().remove("transactions_list"); } catch (e) {}
 }
 
 function invalidateKasCache_() {
-  try {
-    const cache = CacheService.getScriptCache();
-    const keys = cache.getAllKeys();
-    for (let i = 0; i < keys.length; i++) {
-      if (keys[i].startsWith("kas_harian_")) {
-        cache.remove(keys[i]);
-      }
-    }
-  } catch (e) {}
+  bumpCacheVersion_(KAS_CACHE_VERSION_KEY);
 }
 
 function invalidateReportCache_() {
-  try {
-    const cache = CacheService.getScriptCache();
-    const keys = cache.getAllKeys();
-    for (let i = 0; i < keys.length; i++) {
-      if (keys[i].startsWith("report_data_") || keys[i].startsWith("kas_periode_")) {
-        cache.remove(keys[i]);
-      }
-    }
-  } catch (e) {}
+  bumpCacheVersion_(REPORT_CACHE_VERSION_KEY);
 }
 
 // [P0] Generate ID unik menggunakan Utilities.getUuid() — menghindari collision
@@ -564,27 +582,35 @@ function parseSafeDate(rawDate) {
   return new Date().toISOString();
 }
 
+function makeTransactionsHash_(version, data) {
+  const lastItem = data && data.length > 0 ? data[data.length - 1] : null;
+  const lastPart = lastItem ? lastItem.id + "_" + lastItem.tanggal : "empty";
+  return version + "_" + (data ? data.length : 0) + "_" + lastPart;
+}
+
+function packTransactionsResponse_(data, version, clientHash) {
+  const hash = makeTransactionsHash_(version, data);
+  if (clientHash && clientHash === hash) return { noChange: true, hash: hash };
+  return { data: data, hash: hash };
+}
+
 function getTransactions(token, clientHash) {
   validateSession_(token);
   try {
-    // [OPT] Check cache first (60s TTL)
-    const cached = CacheService.getScriptCache().get("transactions_list");
+    const version = getCacheVersion_(TRANSACTIONS_VERSION_KEY);
+    const cacheKey = "transactions_list_" + version;
+
+    // [OPT] Check cache first (60s TTL). Key memakai version agar update status/pelunasan
+    // langsung membuat ETag berubah tanpa perlu wildcard delete cache.
+    const cached = CacheService.getScriptCache().get(cacheKey);
     if (cached) {
       const result = JSON.parse(cached);
-      // [OPT] ETag support: compute hash, return noChange if match
-      if (clientHash && result.length > 0) {
-        const lastItem = result[result.length - 1];
-        const serverHash = result.length + "_" + lastItem.id + "_" + lastItem.tanggal;
-        if (clientHash === serverHash) {
-          return { noChange: true, hash: serverHash };
-        }
-      }
-      return result;
+      return packTransactionsResponse_(result, version, clientHash);
     }
 
     const sheet = getSheet("transactions");
     const lastRow = sheet.getLastRow();
-    if (lastRow <= 1) return [];
+    if (lastRow <= 1) return packTransactionsResponse_([], version, clientHash);
 
     // [P2] Optimasi: hanya baca 300 row terakhir daripada seluruh sheet
     const rowCount = Math.min(300, lastRow - 1);
@@ -641,19 +667,16 @@ function getTransactions(token, clientHash) {
       metode_pelunasan: String(r[13] || ""),
     }));
 
-    // [OPT] Cache result untuk 60 detik
-    CacheService.getScriptCache().put("transactions_list", JSON.stringify(result), 60);
-
-    // [OPT] ETag support: compute hash, return with data
-    if (clientHash && result.length > 0) {
-      const lastItem = result[result.length - 1];
-      const serverHash = result.length + "_" + lastItem.id + "_" + lastItem.tanggal;
-      if (clientHash === serverHash) {
-        return { noChange: true, hash: serverHash };
+    // [OPT] Cache result untuk 60 detik. Guard ukuran CacheService (~100KB/item)
+    // agar payload transaksi besar tidak membuat request gagal.
+    try {
+      const payload = JSON.stringify(result);
+      if (payload.length < 95000) {
+        CacheService.getScriptCache().put(cacheKey, payload, 60);
       }
-    }
+    } catch (e) {}
 
-    return result;
+    return packTransactionsResponse_(result, version, clientHash);
   } catch (e) {
     logError("getTransactions", e.message);
     throw new Error("Gagal baca sheet Transaksi: " + e.message);
@@ -1314,7 +1337,7 @@ function getKasHarian(token, tanggalStr) {
     const targetDate = tanggalStr ? new Date(tanggalStr) : new Date();
     targetDate.setHours(0, 0, 0, 0);
     const dateKey = targetDate.toISOString().split('T')[0];
-    const cacheKey = "kas_harian_" + dateKey + "_" + session.username;
+    const cacheKey = "kas_harian_" + getCacheVersion_(KAS_CACHE_VERSION_KEY) + "_" + dateKey + "_" + session.username;
     const cached = CacheService.getScriptCache().get(cacheKey);
     if (cached) return JSON.parse(cached);
 
@@ -1631,7 +1654,7 @@ function getKasPeriode(token, startDateStr, endDateStr) {
   try {
     // [OPT] CacheService 30s — hindari baca ulang sheet saat user refresh laporan
     const cache = CacheService.getScriptCache();
-    const cacheKey = "kas_periode_" + (startDateStr || "all") + "_" + (endDateStr || "all");
+    const cacheKey = "kas_periode_" + getCacheVersion_(KAS_CACHE_VERSION_KEY) + "_" + (startDateStr || "all") + "_" + (endDateStr || "all");
     const cached = cache.get(cacheKey);
     if (cached) {
       try { return JSON.parse(cached); } catch (e) {}
@@ -1688,7 +1711,7 @@ function getReportData(token, startDateStr, endDateStr) {
   try {
     // [OPT] CacheService 30s — hindari baca ulang sheet saat user refresh laporan
     const cache = CacheService.getScriptCache();
-    const cacheKey = "report_data_" + (startDateStr || "all") + "_" + (endDateStr || "all");
+    const cacheKey = "report_data_" + getCacheVersion_(REPORT_CACHE_VERSION_KEY) + "_" + (startDateStr || "all") + "_" + (endDateStr || "all");
     const cached = cache.get(cacheKey);
     if (cached) {
       try { return JSON.parse(cached); } catch (e) {}

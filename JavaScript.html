@@ -25,6 +25,7 @@
   let pendingPelunasanId = null; // [FIX] Deklarasi eksplisit
   let currentShift = null; // Shift state
   let transactionsHash = null; // [OPT] ETag for incremental sync
+  let isDashboardBootstrapping = false; // [PERF] Hindari RPC ganda saat initial render
 
   // [OPT] IndexedDB helper for persistent client-side cache
   const trxDB = {
@@ -133,6 +134,14 @@
     }, 0);
 
     return wrapped;
+  }
+
+  function unwrapTransactionsResponse(response) {
+    if (response && Array.isArray(response.data)) {
+      if (response.hash) transactionsHash = response.hash;
+      return response.data;
+    }
+    return Array.isArray(response) ? response : [];
   }
 
   window.perfStats = function () {
@@ -808,7 +817,12 @@
         // - admin: section Overview (default lama, full visibility)
         // - kasir: section Transaksi (80% waktu kasir di sini, hemat 1 klik)
         const defaultSection = (currentUser && currentUser.role === "kasir") ? "transaksi" : "overview";
-        showSection(defaultSection);
+        isDashboardBootstrapping = true;
+        try {
+          showSection(defaultSection);
+        } finally {
+          isDashboardBootstrapping = false;
+        }
       } catch (e) { console.error("[setupDashboard] showSection:", e); }
       // [PERF] Hapus fetchCustomers() di sini — getDashboardBundle sudah memuat customers.
       // Tab Pelanggan akan render dari allCustomers saat user pertama kali buka tab itu.
@@ -855,7 +869,7 @@
             google.script.run
               .withSuccessHandler(function(txData) {
                 if (txData) {
-                  allTransactions = txData;
+                  allTransactions = unwrapTransactionsResponse(txData);
                   transactionsCacheTime = Date.now();
                   updateOverviewStats();
                   updateRecentActivity();
@@ -890,7 +904,7 @@
                   }
                   const txData = bundle.transactions;
                   if (txData) {
-                    allTransactions = txData;
+                    allTransactions = unwrapTransactionsResponse(txData);
                     transactionsCacheTime = Date.now();
                     updateOverviewStats();
                     updateRecentActivity();
@@ -961,7 +975,7 @@
                 }
                 const txData = bundle.transactions;
                 if (txData) {
-                  allTransactions = txData;
+                  allTransactions = unwrapTransactionsResponse(txData);
                   transactionsCacheTime = Date.now();
                   updateOverviewStats();
                   updateRecentActivity();
@@ -1368,7 +1382,7 @@
         }
       }
     }
-    if (name === "transaksi" || name === "paket") fetchPaket();
+    if ((name === "transaksi" || name === "paket") && !isDashboardBootstrapping) fetchPaket();
     if (name === "transaksi") restoreDraft();
     if (name === "pelanggan") {
       document.getElementById("searchCustomerDB").value = "";
@@ -1390,7 +1404,7 @@
       if (sH) sH.value = "";
       const fS = document.getElementById("filterStatus");
       if (fS) fS.value = "Semua";
-      loadTransactions();
+      if (!isDashboardBootstrapping) loadTransactions();
     }
     if (name === "settings") {
       document.getElementById("setAppName").value =
@@ -1913,20 +1927,21 @@
           return;
         }
 
-        allTransactions = data;
+        const txData = unwrapTransactionsResponse(data);
+        allTransactions = txData;
         transactionsCacheTime = Date.now();
 
-        // [OPT] Compute hash for next ETag check
-        if (data.length > 0) {
-          const lastItem = data[data.length - 1];
-          transactionsHash = data.length + "_" + lastItem.id + "_" + lastItem.tanggal;
+        // [OPT] Fallback hash untuk response lama tanpa hash server.
+        if (!data.hash && txData.length > 0) {
+          const lastItem = txData[txData.length - 1];
+          transactionsHash = txData.length + "_" + lastItem.id + "_" + lastItem.tanggal;
         }
 
         // [PERF] Persist ke IndexedDB + sessionStorage
-        trxDB.save(data, transactionsHash);
+        trxDB.save(txData, transactionsHash);
         try {
           sessionStorage.setItem("trx_cache_v1", JSON.stringify({
-            data: data,
+            data: txData,
             _ts: transactionsCacheTime,
           }));
         } catch (e) { /* sessionStorage full atau di-disable, abaikan */ }
