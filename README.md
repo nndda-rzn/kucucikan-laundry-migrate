@@ -10,35 +10,82 @@ _Sistem kasir end-to-end dengan shift management, profiling instrumentation, inc
 
 <br />
 
-<!-- Tech Stack -->
+<!-- GitHub Stats -->
+[![GitHub Stars](https://img.shields.io/github/stars/nndda-rzn/kucucikan-laundry-migrate?style=for-the-badge&logo=github&logoColor=white)](https://github.com/nndda-rzn/kucucikan-laundry-migrate/stargazers)
+[![GitHub Forks](https://img.shields.io/github/forks/nndda-rzn/kucucikan-laundry-migrate?style=for-the-badge&logo=github&logoColor=white)](https://github.com/nndda-rzn/kucucikan-laundry-migrate/network/members)
+[![GitHub Last Commit](https://img.shields.io/github/last-commit/nndda-rzn/kucucikan-laundry-migrate?style=for-the-badge)](https://github.com/nndda-rzn/kucucikan-laundry-migrate/commits/main)
+[![GitHub Issues](https://img.shields.io/github/issues/nndda-rzn/kucucikan-laundry-migrate?style=for-the-badge)](https://github.com/nndda-rzn/kucucikan-laundry-migrate/issues)
+[![GitHub Pull Requests](https://img.shields.io/github/issues-pr/nndda-rzn/kucucikan-laundry-migrate?style=for-the-badge)](https://github.com/nndda-rzn/kucucikan-laundry-migrate/pulls)
+[![GitHub Repo Size](https://img.shields.io/github/repo-size/nndda-rzn/kucucikan-laundry-migrate?style=for-the-badge)](https://github.com/nndda-rzn/kucucikan-laundry-migrate)
+
+<br />
+
+<!-- Platform & Runtime -->
 [![Google Apps Script](https://img.shields.io/badge/Google_Apps_Script-4285F4?style=for-the-badge&logo=google&logoColor=white)](https://script.google.com/)
-[![JavaScript ES2020](https://img.shields.io/badge/JavaScript-ES2020-F7DF1E?style=for-the-badge&logo=javascript&logoColor=black)](https://developer.mozilla.org/en-US/docs/Web/JavaScript)
-[![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS_v4.2-38BDF8?style=for-the-badge&logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
-[![HTML5](https://img.shields.io/badge/HTML5-E34F26?style=for-the-badge&logo=html5&logoColor=white)](https://developer.mozilla.org/en-US/docs/Web/HTML)
+[![V8 Runtime](https://img.shields.io/badge/V8_Runtime-FF6F00?style=for-the-badge&logo=v8&logoColor=white)](#)
 [![Google Sheets](https://img.shields.io/badge/Google_Sheets-0F9D58?style=for-the-badge&logo=googlesheets&logoColor=white)](https://sheets.google.com/)
 [![Google Drive](https://img.shields.io/badge/Google_Drive-1A73E8?style=for-the-badge&logo=googledrive&logoColor=white)](https://drive.google.com/)
+[![Google Stackdriver](https://img.shields.io/badge/Stackdriver-4285F4?style=for-the-badge&logo=googlecloud&logoColor=white)](#)
 
 <br />
 
-<!-- Libraries & Tooling -->
+<!-- Frontend & UI -->
+[![HTML5](https://img.shields.io/badge/HTML5-E34F26?style=for-the-badge&logo=html5&logoColor=white)](https://developer.mozilla.org/en-US/docs/Web/HTML)
+[![JavaScript ES2020](https://img.shields.io/badge/JavaScript-ES2020-F7DF1E?style=for-the-badge&logo=javascript&logoColor=black)](https://developer.mozilla.org/en-US/docs/Web/JavaScript)
+[![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-v4.2.3-38BDF8?style=for-the-badge&logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
+[![Google Fonts](https://img.shields.io/badge/Google_Fonts-Plus_Jakarta_Sans-4285F4?style=for-the-badge&logo=googlefonts&logoColor=white)](https://fonts.google.com/)
+[![Space Mono](https://img.shields.io/badge/Space_Mono-F5F5F5?style=flat-square&logo=googlefonts&logoColor=black)](https://fonts.google.com/specimen/Space+Mono)
+
+<br />
+
+<!-- Server-Side GAS Services -->
+[![SpreadsheetApp](https://img.shields.io/badge/SpreadsheetApp-0F9D58?style=flat-square&logo=googlesheets&logoColor=white)](#)
+[![CacheService](https://img.shields.io/badge/CacheService-4285F4?style=flat-square&logo=google&logoColor=white)](#)
+[![LockService](https://img.shields.io/badge/LockService-F9AB00?style=flat-square&logo=google&logoColor=white)](#)
+[![PropertiesService](https://img.shields.io/badge/PropertiesService-34A853?style=flat-square&logo=google&logoColor=white)](#)
+[![HtmlService](https://img.shields.io/badge/HtmlService-E34F26?style=flat-square&logo=google&logoColor=white)](#)
+[![ScriptApp](https://img.shields.io/badge/ScriptApp-7B1FA2?style=flat-square&logo=google&logoColor=white)](#)
+[![Utilities](https://img.shields.io/badge/Utilities-00ACC1?style=flat-square&logo=google&logoColor=white)](#)
+
+<br />
+
+<!-- Client-Side APIs -->
+[![IndexedDB](https://img.shields.io/badge/IndexedDB-7C3AED?style=flat-square&logo=mozilla&logoColor=white)](https://developer.mozilla.org/en-US/docs/Web/API/IndexedDB_API)
+[![localStorage](https://img.shields.io/badge/localStorage-6366F1?style=flat-square)](https://developer.mozilla.org/en-US/docs/Web/API/Window/localStorage)
+[![sessionStorage](https://img.shields.io/badge/sessionStorage-8B5CF6?style=flat-square)](https://developer.mozilla.org/en-US/docs/Web/API/Window/sessionStorage)
+[![AudioContext](https://img.shields.io/badge/AudioContext-F59E0B?style=flat-square)](https://developer.mozilla.org/en-US/docs/Web/API/AudioContext)
+[![Performance API](https://img.shields.io/badge/Performance_API-10B981?style=flat-square)](https://developer.mozilla.org/en-US/docs/Web/API/Performance)
+
+<br />
+
+<!-- Libraries & CDN -->
 [![ApexCharts](https://img.shields.io/badge/ApexCharts-008FFB?style=flat-square&logo=apache-echarts&logoColor=white)](https://apexcharts.com/)
-[![jsPDF](https://img.shields.io/badge/jsPDF-E03E2F?style=flat-square&logo=adobeacrobatreader&logoColor=white)](https://github.com/parallax/jsPDF)
-[![clasp](https://img.shields.io/badge/clasp-CLI-4285F4?style=flat-square&logo=google&logoColor=white)](https://github.com/google/clasp)
-[![IndexedDB](https://img.shields.io/badge/IndexedDB-persistent_cache-7C3AED?style=flat-square&logo=mozillafirefox&logoColor=white)](https://developer.mozilla.org/en-US/docs/Web/API/IndexedDB_API)
-[![V8 Runtime](https://img.shields.io/badge/Runtime-V8-FF6F00?style=flat-square&logo=v8&logoColor=white)](#)
+[![jsPDF](https://img.shields.io/badge/jsPDF_2.5.1-E03E2F?style=flat-square&logo=adobeacrobatreader&logoColor=white)](https://github.com/parallax/jsPDF)
+[![jsPDF-AutoTable](https://img.shields.io/badge/jsPDF--AutoTable_3.5.28-E03E2F?style=flat-square&logo=adobeacrobatreader&logoColor=white)](https://github.com/simonbengtsson/jsPDF-AutoTable)
 
 <br />
 
-<!-- Project Status -->
+<!-- Build & Tooling -->
+[![Node.js](https://img.shields.io/badge/Node.js-18%2B-339933?style=for-the-badge&logo=node.js&logoColor=white)](https://nodejs.org/)
+[![npm](https://img.shields.io/badge/npm-CB3837?style=for-the-badge&logo=npm&logoColor=white)](https://www.npmjs.com/)
+[![clasp](https://img.shields.io/badge/clasp_CLI-4285F4?style=for-the-badge&logo=google&logoColor=white)](https://github.com/google/clasp)
+[![Tailwind CLI](https://img.shields.io/badge/Tailwind_CLI-38BDF8?style=for-the-badge&logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
+[![Git](https://img.shields.io/badge/Git-F05032?style=for-the-badge&logo=git&logoColor=white)](https://git-scm.com/)
+[![GitHub](https://img.shields.io/badge/GitHub-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/)
+
+<br />
+
+<!-- Status & Meta -->
 [![Status](https://img.shields.io/badge/status-production_ready-22C55E?style=flat-square)](#)
 [![Version](https://img.shields.io/badge/version-2.9-2563EB?style=flat-square)](#-changelog)
 [![Build](https://img.shields.io/badge/build-passing-22C55E?style=flat-square)](#)
-[![Timezone](https://img.shields.io/badge/timezone-Asia%2FJakarta-8B5CF6?style=flat-square)](#)
 [![License](https://img.shields.io/badge/license-MIT-10B981?style=flat-square)](#-license)
+[![Timezone](https://img.shields.io/badge/timezone-Asia%2FJakarta-8B5CF6?style=flat-square)](#)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-22C55E?style=flat-square)](#-contributing)
-[![Conventional Commits](https://img.shields.io/badge/conventional_commits-1.0-FE5196?style=flat-square&logo=conventionalcommits&logoColor=white)](https://www.conventionalcommits.org/)
+[![Conventional Commits](https://img.shields.io/badge/commits-conventional-FE5196?style=flat-square&logo=conventionalcommits&logoColor=white)](https://www.conventionalcommits.org/)
 [![Code Style](https://img.shields.io/badge/code_style-LF_only-0EA5E9?style=flat-square)](#)
 [![Made for UMKM](https://img.shields.io/badge/made_for-UMKM-EF4444?style=flat-square)](#)
+[![Zero Cost](https://img.shields.io/badge/infra_cost-%240%2Fmonth-22C55E?style=flat-square)](#)
 
 <br />
 
@@ -46,7 +93,9 @@ _Sistem kasir end-to-end dengan shift management, profiling instrumentation, inc
 [**Arsitektur**](#-arsitektur--alur-data) ·
 [**Performance**](#-performance--profiling) ·
 [**Skema DB**](#-skema-database) ·
+[**API Ref**](#-api-reference) ·
 [**Deploy**](#-instalasi--deployment) ·
+[**FAQ**](#-faq) ·
 [**Changelog**](#-changelog)
 
 </div>
@@ -61,10 +110,12 @@ _Sistem kasir end-to-end dengan shift management, profiling instrumentation, inc
 - [Arsitektur & Alur Data](#-arsitektur--alur-data)
 - [Performance & Profiling](#-performance--profiling)
 - [Skema Database](#-skema-database)
+- [API Reference](#-api-reference)
 - [Instalasi & Deployment](#-instalasi--deployment)
 - [Konfigurasi Pasca-Deploy](#-konfigurasi-pasca-deploy)
 - [Workflow Pengembangan](#-workflow-pengembangan)
 - [Kredensial Default](#-kredensial-default)
+- [FAQ](#-faq)
 - [Roadmap](#-roadmap)
 - [Changelog](#-changelog)
 - [Contributing](#-contributing)
@@ -77,9 +128,20 @@ _Sistem kasir end-to-end dengan shift management, profiling instrumentation, inc
 **Kucucikan Laundry POS** adalah sistem kasir _end-to-end_ yang mengeliminasi
 biaya infrastruktur dengan memanfaatkan ekosistem Google Workspace:
 
-- **Google Sheets** sebagai database relasional
-- **Google Apps Script (V8)** sebagai backend serverless
+- **Google Sheets** sebagai database relasional (12 sheet)
+- **Google Apps Script (V8)** sebagai backend serverless (83 fungsi)
 - **Web App URL** sebagai endpoint produksi yang dibagikan ke kasir/admin
+
+### Arsitektur Kode
+
+| Layer | File | Ukuran | Deskripsi |
+|-------|------|--------|-----------|
+| **Backend** | `Kode.js` | 104 KB | 83 server functions, 2.968 baris |
+| **Frontend Logic** | `JavaScript.html` | 272 KB | 50+ client functions, 6.200+ baris |
+| **HTML Template** | `index.html` | 184 KB | SPA layout, modals, sections (3.700+ baris) |
+| **CSS (Compiled)** | `Tailwind.html` | 74 KB | Tailwind CSS v4.2.3 minified |
+| **Custom CSS** | `CSS.html` | 3 KB | Print, a11y, animations, scrollbar |
+| **Build Script** | `build-tailwind.js` | 1 KB | Tailwind CLI wrapper |
 
 Cocok untuk UMKM laundry dengan 1–3 kasir aktif yang membutuhkan POS profesional
 tanpa biaya berlangganan bulanan, namun tetap menuntut akuntabilitas
@@ -100,7 +162,7 @@ tanpa biaya berlangganan bulanan, namun tetap menuntut akuntabilitas
 - Sistem DP (Down Payment) dan pelunasan
 - Multi-item per transaksi (kiloan + satuan)
 - Auto-save draft tiap 5 detik (anti-crash browser)
-- Cetak nota digital (thermal-ready)
+- Cetak nota digital (thermal-ready 58mm)
 - Konfirmasi WhatsApp dengan template kustom
 - Status transaksi: Proses → Selesai → Diambil
 - Riwayat transaksi dengan filter & search
@@ -156,7 +218,7 @@ tanpa biaya berlangganan bulanan, namun tetap menuntut akuntabilitas
   - Scope shift → akumulasi DP + pelunasan dalam window shift aktif
   - Scope date → DP berdasarkan tanggal transaksi + pelunasan
     berdasarkan `tanggal_pelunasan`
-  - Subtitle realtime: `Tunai Rp X • Non-Tunai Rp Y`
+  - Subtitle realtime: `Tunai Rp X · Non-Tunai Rp Y`
   - Auto-refresh setelah `createTransaction` & `lunasDanAmbil`
 - Banner edukatif "Uang Awal Otomatis" dari shift aktif
 - Estimasi saldo real-time
@@ -178,9 +240,18 @@ tanpa biaya berlangganan bulanan, namun tetap menuntut akuntabilitas
 - 9 modal dengan `role="dialog"` + `aria-modal` + `aria-labelledby`
 - Decorative icon di-mark `aria-hidden="true"` agar screen reader skip
 - WCAG AA contrast — semua label kecil pakai `text-slate-500`
+- `focus-visible` outline pada semua interactive elements
+- `@media (prefers-reduced-motion: reduce)` — disable semua animasi
 - `aria-disabled` + `cursor: not-allowed` + tooltip pada form disabled
 - Mobile bottom-nav dengan `aria-label` per tombol
 - Focus management saat modal open/close
+
+### Integrasi WhatsApp
+- Kirim konfirmasi via `wa.me` URL dengan template kustom
+- Placeholder: `{customer}`, `{nota}`, `{paket}`, `{berat}`,
+  `{total}`, `{status_pembayaran}`, `{estimasi}`, `{status}`, `{nama_toko}`
+- Phone normalization (strip `+`, spaces, dashes)
+- Validasi: 10-15 digits
 
 ### Administrasi
 - Manajemen pegawai (admin/kasir) dengan role-based access
@@ -191,6 +262,13 @@ tanpa biaya berlangganan bulanan, namun tetap menuntut akuntabilitas
 - Performance benchmark built-in (`runPerfBenchmark`)
 - Profiling instrumentation dengan perf_logs (auto-rotate 1000 row)
 
+### Security
+- Token-based session (UUID, TTL 8 jam, rolling refresh)
+- Salted hash password (SHA-256) dengan auto-migrasi format lama
+- Login rate limit — 5 percobaan gagal → kunci 15 menit
+- Admin-only guards via `validateAdminSession_()`
+- Server-side trust — total, diskon, status divalidasi ulang di server
+
 </td>
 </tr>
 </table>
@@ -199,24 +277,114 @@ tanpa biaya berlangganan bulanan, namun tetap menuntut akuntabilitas
 
 ## Tech Stack
 
-| Layer | Teknologi |
-|-------|-----------|
-| **Backend** | Google Apps Script (V8 Runtime), JavaScript ES2020 |
-| **Database** | Google Sheets (8 sheet relasional + 2 log sheets) |
-| **Frontend** | HTML5, JavaScript ES2020, Tailwind CSS v4.2.3 |
-| **Charts** | ApexCharts (lazy-loaded ~250KB) |
-| **PDF Export** | jsPDF + jsPDF-AutoTable (lazy-loaded ~150KB) |
-| **Tooling** | clasp (CLI), npm, Tailwind CLI, Git |
-| **Hosting** | Google Workspace (Web App URL) |
-| **Concurrency** | LockService (atomic writes) |
-| **Caching** | 4-layer: CacheService + Memory + sessionStorage + localStorage + IndexedDB |
-| **Sync** | ETag-style incremental sync + adaptive polling (30s/120s) |
-| **Profiling** | Custom `_perf` wrapper + sample log ke `perf_logs` sheet |
-| **Security** | Token-based session (8h TTL) + salted password hash + login rate-limit |
+### Platform & Runtime
+
+| Teknologi | Kegunaan |
+|-----------|----------|
+| Google Apps Script (V8 Runtime) | Backend serverless — 83 fungsi, 2.968 baris |
+| Google Sheets | Database relasional (12 sheet + 2 log sheets) |
+| Google Drive | Auto-backup harian (duplikasi spreadsheet) |
+| Google Stackdriver | Error logging via Cloud Logging |
+
+### Server-Side GAS Services (7)
+
+| Service | Method | Kegunaan |
+|---------|--------|----------|
+| `SpreadsheetApp` | `openById()`, `getSheetByName()`, `insertSheet()`, `copy()` | Primary database access |
+| `CacheService` | `getScriptCache()`, `get()`, `put()`, `remove()` | Cross-execution caching (6hr max TTL) |
+| `LockService` | `getScriptLock()`, `tryLock()`, `releaseLock()` | Concurrency control (22 call sites) |
+| `PropertiesService` | `getScriptProperties()`, `getProperty()`, `setProperty()` | Persistent config (DB_ID, cache versions) |
+| `HtmlService` | `createTemplateFromFile()`, `createHtmlOutputFromFile()` | Serve HTML SPA via Web App |
+| `ScriptApp` | `getProjectTriggers()`, `newTrigger()`, `deleteTrigger()` | Time-driven triggers (backup, warmup, auto-close) |
+| `Utilities` | `getUuid()`, `computeDigest()`, `formatDate()` | UUID, SHA-256 hash, date formatting |
+
+### Frontend & UI
+
+| Teknologi | Versi | Kegunaan |
+|-----------|-------|----------|
+| HTML5 | - | SPA template dengan GAS templating (`<?= ?>` scriptlets) |
+| JavaScript ES2020 | - | Client-side logic (50+ functions, 6.200+ baris) |
+| Tailwind CSS | v4.2.3 | Utility-first CSS framework (74KB compiled) |
+| Plus Jakarta Sans | 400-800 | Primary body font (Google Fonts) |
+| Space Mono | 400, 700 | Monospace receipt font (Google Fonts) |
+
+### Client-Side Web APIs (18+)
+
+| API | Kegunaan |
+|-----|----------|
+| `google.script.run` | RPC ke GAS backend (42 panggilan) |
+| `IndexedDB` | Persistent transaction cache ("LaundryPOS", store "transactions") |
+| `localStorage` | Session, settings, draft, packages cache (4 keys) |
+| `sessionStorage` | Transaction fallback cache (`trx_cache_v1`) |
+| `AudioContext` / `webkitAudioContext` | Notification beep (2-tone: 800Hz + 1200Hz) |
+| `performance.now()` | Client-side RPC profiling (`trackedRun()`) |
+| `URL.createObjectURL()` | CSV export download |
+| `Blob` | CSV file generation dengan BOM (Excel compatible) |
+| `window.print()` | Receipt printing (thermal 58mm via CSS `@media print`) |
+| `requestAnimationFrame` | UI animation smoothness |
+| `document.getElementById()` | DOM manipulation |
+| `document.createElement()` | Dynamic script loading, toast notifications |
+| `document.addEventListener()` | Click-outside-close for dropdowns |
+| `JSON.parse()` / `JSON.stringify()` | Cache serialization |
+| `Date` / `toLocaleDateString()` | Date formatting (`id-ID` locale) |
+| `Intl` | Rupiah formatting via `toLocaleString("id-ID")` |
+| `setTimeout` / `setInterval` | Debouncing, auto-refresh, session checks |
+| `Promise` | IndexedDB async wrappers |
+
+### Libraries & CDN (Lazy-Loaded)
+
+| Library | Versi | CDN URL | Fungsi |
+|---------|-------|---------|--------|
+| ApexCharts | latest | `cdn.jsdelivr.net/npm/apexcharts` | Charts & visualisasi data (~250KB) |
+| jsPDF | 2.5.1 | `cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js` | PDF export |
+| jsPDF-AutoTable | 3.5.28 | `cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js` | Table export ke PDF (~150KB total) |
+
+### Build & Tooling
+
+| Tool | Versi | Kegunaan |
+|------|-------|----------|
+| Node.js | 18+ | Build runtime |
+| npm | - | Package manager |
+| @tailwindcss/cli | 4.2.3 | Tailwind CSS compilation |
+| clasp | - | Google Apps Script CLI (push/deploy) |
+| Git | - | Version control |
+| GitHub | - | Repository hosting |
+
+### Caching Strategy (4-Layer)
+
+| Layer | Media | TTL | Data |
+|-------|-------|-----|------|
+| **Server CacheService** | GAS ScriptCache | 8h / 2-10m | Session (8h), customers (2m), packages (10m), price map (5m), settings (5m), reports (30s), kas (30s) |
+| **Memory** | Per-execution | Single request | Price map per execution |
+| **Client RAM** | JavaScript | 1-2m | Transactions (1m), customers (2m) |
+| **Persistent Client** | localStorage + sessionStorage + IndexedDB | 1h / session | Settings (1h), draft (1h), packages (5m), transactions (IndexedDB persistent) |
+
+### localStorage Keys
+
+| Key | TTL | Data |
+|-----|-----|------|
+| `l_premium_session_v3` | 6h | User session (user, token, expiry) |
+| `l_premium_settings_cache` | 1h | App settings cache |
+| `l_premium_draft` | 1h | Transaction draft auto-save |
+| `l_premium_packages_cache` | 5m | Packages persistent cache |
 
 ---
 
 ## Arsitektur & Alur Data
+
+### File Architecture
+
+```
+├── Kode.js              (104 KB) ── Server: 83 functions, 2.968 baris
+├── JavaScript.html      (272 KB) ── Client: 50+ functions, 6.200+ baris
+├── index.html           (184 KB) ── SPA template, modals, sections
+├── Tailwind.html         (74 KB) ── Compiled Tailwind CSS (minified)
+├── CSS.html               (3 KB) ── Custom styles, print, a11y, animations
+├── appsscript.json             ── GAS config (V8, Stackdriver, Web App)
+├── package.json                ── npm config (tailwindcss, @tailwindcss/cli)
+├── build-tailwind.js           ── Build pipeline (Tailwind CLI → Tailwind.html)
+└── input.css                   ── Tailwind source (@import "tailwindcss")
+```
 
 ### High-Level Architecture
 
@@ -226,28 +394,30 @@ flowchart TB
         UI[index.html + JavaScript.html]
         LS[(localStorage<br/>settings TTL 1h)]
         SS[(sessionStorage<br/>trx hydration)]
+        IDB[(IndexedDB<br/>LaundryPOS)]
         RAM[(In-memory<br/>allTransactions, allCustomers)]
     end
 
-    subgraph Server["Google Apps Script (V8)"]
+    subgraph Server["Google Apps Script (V8) — 83 Functions"]
         Auth[Auth & Session]
         CRUD[CRUD Logic]
         Shift[Shift Manager]
         Perf[_perf Profiler]
-        Lock[LockService]
+        Lock[LockService<br/>22 call sites]
         Cache[(CacheService<br/>session 8h, lists 2-10m)]
     end
 
-    subgraph DB["Google Sheets"]
+    subgraph DB["Google Sheets — 12 Sheets"]
         T1[(transactions<br/>23 cols)]
         T2[(shifts<br/>15 cols + breakdown_json)]
         T3[(packages, customers,<br/>users, settings,<br/>kas_awal, pengeluaran)]
         Logs[(error_logs<br/>perf_logs)]
     end
 
-    UI -->|google.script.run| Auth
+    UI -->|google.script.run<br/>42 RPC calls| Auth
     UI <--> LS
     UI <--> SS
+    UI <--> IDB
     UI <--> RAM
 
     Auth --> Cache
@@ -278,6 +448,7 @@ sequenceDiagram
     User->>Browser: Submit login
     Browser->>GAS: login(username, password)
     GAS->>Sheet: Read users
+    GAS->>GAS: SHA-256 salted hash verify
     GAS->>Cache: Store session token (TTL 8h)
     GAS-->>Browser: { success, token, role }
 
@@ -291,7 +462,7 @@ sequenceDiagram
     GAS-->>Browser: { transactions, packages,<br/>settings, customers, activeShift }
 
     Browser->>Browser: Render dashboard
-    Browser->>Browser: Persist trx to sessionStorage
+    Browser->>Browser: Persist trx to IndexedDB
     Browser->>Browser: Hydrate localStorage settings cache
 ```
 
@@ -449,17 +620,20 @@ Executions) dan sample 1 dari 5 call ke sheet `perf_logs` untuk audit.
 #### Reliability
 - **LockService** di semua write kritis (createTransaction,
   lunasDanAmbil, openShift, closeShift, forceCloseShift,
-  autoCloseExpiredShifts)
+  autoCloseExpiredShifts) — 22 call sites
 - **Defensive setupDashboard** dengan per-blok try/catch — dashboard
   tetap muncul walau ada satu fungsi error
+- **3-tier fallback** — Dashboard loads: FastBundle → full bundle → individual calls
 - **Silent error logging** ke sheet `error_logs` untuk audit
-  pasca-insiden
+  pasca-insiden (auto-prune 500 row)
 - **Auto-backup harian** ke Drive pukul 02:00
 - **Auto-close shift harian** pukul 23:50 sebagai fail-safe
+- **Double-submit prevention** — `isSubmitting` flag + `setBtnLoading()` helper
+- **Loading state** — Depth-tracked loading indicator dengan 15s timeout warning
 
 #### Security
 - **Token-based session** dengan UUID, TTL 8 jam, rolling refresh
-- **Salted hash password** dengan auto-migrasi format lama saat login
+- **Salted hash password** (SHA-256) dengan auto-migrasi format lama saat login
 - **Login rate limit** — 5 percobaan gagal mengunci 15 menit
 - **Admin-only guards** via `validateAdminSession_()` di endpoint
   sensitif (`deleteTransaction`, `forceCloseShift`, `getShiftHistory`,
@@ -603,6 +777,153 @@ Format `breakdown_json`:
 
 ---
 
+## API Reference
+
+Sistem menyediakan **83 server functions** yang dipanggil dari client
+via `google.script.run`. Klik untuk expand per kategori.
+
+<details>
+<summary><b>Authentication & Session (6 functions)</b></summary>
+
+| Function | Akses | Kegunaan |
+|----------|-------|----------|
+| `login(username, password)` | Public | Login dengan rate limiting (5 attempts → 15min lock) |
+| `validateSession_(token)` | Internal | Validasi session token via CacheService |
+| `validateAdminSession_(token)` | Internal | Validasi admin-only session |
+| `computeHash(rawPassword)` | Internal | SHA-256 hash computation |
+| `hashPassword(password)` | Internal | Salted password hash (format: `salt:hash`) |
+| `verifyPassword(input, db)` | Internal | Verify dengan backward compat |
+
+</details>
+
+<details>
+<summary><b>Transaction Management (6 functions)</b></summary>
+
+| Function | Akses | Kegunaan |
+|----------|-------|----------|
+| `getTransactions(token, clientHash)` | Auth | Get with ETag incremental sync (300 row limit) |
+| `createTransaction(token, data)` | Auth | Create (with LockService) |
+| `updateTransactionStatus(token, id, status)` | Auth | Update status (Proses/Selesai/Diambil) |
+| `lunasDanAmbil(token, id, metode)` | Auth | Mark paid+collected |
+| `deleteTransaction(token, id)` | Admin | Delete transaction |
+| `saveOrUpdateCustomer(kasir, nama, wa, date)` | Auth | Upsert customer on transaction |
+
+</details>
+
+<details>
+<summary><b>Customer Management (4 functions)</b></summary>
+
+| Function | Akses | Kegunaan |
+|----------|-------|----------|
+| `getCustomers(token)` | Auth | Get (cached 2m, max 1500) |
+| `addCustomerData(token, nama, wa)` | Auth | Add customer |
+| `updateCustomerData(token, id, nama, wa)` | Auth | Update customer |
+| `deleteCustomerData(token, id)` | Auth | Delete customer |
+
+</details>
+
+<details>
+<summary><b>Package Management (5 functions)</b></summary>
+
+| Function | Akses | Kegunaan |
+|----------|-------|----------|
+| `getPackages(token)` | Auth | Get (cached 10m) |
+| `addPackage(token, ...)` | Admin | Add package |
+| `updatePackage(token, id, ...)` | Admin | Update package |
+| `updatePackageStatus(token, id, status)` | Admin | Toggle status (Aktif/Nonaktif) |
+| `deletePackage(token, id)` | Admin | Delete package |
+
+</details>
+
+<details>
+<summary><b>Settings (2 functions)</b></summary>
+
+| Function | Akses | Kegunaan |
+|----------|-------|----------|
+| `getSettings()` | Public | Get (cached 6h) |
+| `saveSettingsConfig(token, dataObj)` | Admin | Save settings |
+
+</details>
+
+<details>
+<summary><b>Cash Management (5 functions)</b></summary>
+
+| Function | Akses | Kegunaan |
+|----------|-------|----------|
+| `saveUangAwal(token, nominal, dateStr)` | Auth | Save opening cash |
+| `getKasHarian(token, tanggalStr)` | Auth | Get daily report (scope-aware: shift/date/none) |
+| `savePengeluaran(token, keterangan, kategori, jumlah, dateStr)` | Auth | Save expense |
+| `deletePengeluaran(token, id)` | Auth | Delete expense |
+| `getKasPeriode(token, start, end)` | Admin | Get period report |
+
+</details>
+
+<details>
+<summary><b>Shift Management (12 functions)</b></summary>
+
+| Function | Akses | Kegunaan |
+|----------|-------|----------|
+| `openShift(token, modalAwal)` | Auth | Open new shift |
+| `closeShift(token, shiftId, catatan)` | Auth | Close shift with breakdown |
+| `forceCloseShift(token, shiftId, catatan)` | Admin | Admin force-close shift |
+| `getActiveShift_(username)` | Internal | Get active shift (memory+ScriptCache) |
+| `getActiveShiftAPI(token)` | Auth | API wrapper for active shift |
+| `getAllActiveShifts(token)` | Admin | Get all active shifts (cached 15s) |
+| `getShiftHistory(token, start, end)` | Admin | Get shift history (500 row limit) |
+| `computeShiftSummary_(shiftId, modalAwal)` | Internal | Compute shift summary (cached) |
+| `recomputeShiftBreakdown(token, shiftId)` | Admin | Recompute old shift breakdown |
+| `autoCloseExpiredShifts()` | Trigger | Time-trigger auto-close at 23:50 |
+| `_flushAllShiftSummaryCache_()` | Internal | Flush all shift summary caches |
+| `invalidateShiftSummaryCache_(shiftId)` | Internal | Invalidate shift cache |
+
+</details>
+
+<details>
+<summary><b>Dashboard & Reports (7 functions)</b></summary>
+
+| Function | Akses | Kegunaan |
+|----------|-------|----------|
+| `getDashboardBundle(token)` | Auth | Full bundle (tx+pkg+settings+cust+shift) |
+| `getDashboardBundleFast(token, skipPackages)` | Auth | Fast bundle (cached data only) |
+| `getReportData(token, start, end)` | Admin | Report data |
+| `getReportAndKasData(token, start, end)` | Admin | Combined report+cass (optimization) |
+| `aggregateReportData_(reportData, ...)` | Internal | Server-side report pre-aggregation |
+| `getKasHarian(token, tanggalStr)` | Auth | Cash report with scope resolution |
+| `getKasPeriode(token, start, end)` | Admin | Cash report by period |
+
+</details>
+
+<details>
+<summary><b>User Management (3 functions)</b></summary>
+
+| Function | Akses | Kegunaan |
+|----------|-------|----------|
+| `getUsersList(token)` | Admin | List all users |
+| `saveUserAccount(token, isEdit, ...)` | Admin | Create/update user account |
+| `deleteUserAccount(token, username)` | Admin | Delete user (cannot delete "admin") |
+
+</details>
+
+<details>
+<summary><b>Performance & Utilities (10 functions)</b></summary>
+
+| Function | Akses | Kegunaan |
+|----------|-------|----------|
+| `_perf(name, fn)` | Internal | Performance profiling wrapper |
+| `runPerfBenchmark(token)` | Admin | Run performance benchmark |
+| `disablePerfLogging()` | Admin | Disable perf logging |
+| `enablePerfLogging()` | Admin | Enable perf logging |
+| `logError(funcName, message, context)` | Internal | Error logging (console + error_logs sheet) |
+| `generateId(prefix)` | Internal | UUID generation (`prefix-timestamp-random`) |
+| `warmup()` | Trigger | Cold start prevention |
+| `setupAllTriggers()` | Admin | Install all triggers at once |
+| `dailyBackup()` | Trigger | Execute daily spreadsheet backup |
+| `setupDatabase()` | Admin | Create all sheets + migrations (idempotent) |
+
+</details>
+
+---
+
 ## Instalasi & Deployment
 
 ### Prasyarat
@@ -615,8 +936,8 @@ Format `breakdown_json`:
 
 ```bash
 # 1. Clone repository
-git clone https://github.com/nndda-rzn/kucucikan-laundry-gas.git
-cd kucucikan-laundry-gas
+git clone https://github.com/nndda-rzn/kucucikan-laundry-migrate.git
+cd kucucikan-laundry-migrate
 
 # 2. Install clasp global
 npm install -g @google/clasp
@@ -665,7 +986,7 @@ Buka editor (`clasp open`) lalu jalankan fungsi berikut **satu kali**:
 
 | Trigger | Frekuensi | Fungsi |
 |---------|-----------|--------|
-| `warmup` | Tiap 5 menit | Cegah V8 cold start |
+| `warmup` | Tiap 5 menit | Cegah V8 cold start (3-8s → ~500ms) |
 | `autoCloseExpiredShifts` | Harian 23:50 | Tutup shift terbengkalai |
 | `dailyBackup` | Harian 02:00 | Duplikasi DB ke Drive |
 
@@ -725,6 +1046,25 @@ Setelah `setupDatabase()` pertama kali dijalankan:
 
 > **Wajib ganti password** setelah login pertama via menu
 > **Manajemen Pegawai**.
+
+---
+
+## FAQ
+
+| Question | Answer |
+|----------|--------|
+| **Apakah benar-benar gratis?** | Ya. Zero hosting cost — berjalan 100% di Google Workspace tanpa server eksternal |
+| **Berapa kasir yang bisa aktif?** | 1–3 kasir aktif secara bersamaan dengan multi-device sync |
+| **Bagaimana cara backup data?** | Auto-backup harian ke Google Drive pukul 02:00 WIB. Manual: jalankan `dailyBackup()` |
+| **Apakah bisa offline?** | Tidak. Koneksi internet diperlukan untuk sinkronisasi dengan Google Sheets |
+| **Bagaimana cara update versi?** | `clasp push` lalu `clasp deploy` |
+| **Apakah ada support?** | Issues via GitHub, PRs welcome |
+| **Berapa banyak transaksi yang bisa ditangani?** | Hingga ribuan transaksi (300 terbaru di-cache, sisanya di sheet) |
+| **Apakah data aman?** | Ya. Token-based auth (8h TTL), salted SHA-256 hash, rate limiting, admin-only guards |
+| **Bisa digunakan di mobile?** | Ya. Responsive design dengan bottom navigation, touch-friendly |
+| **Apakah ada cetak struk?** | Ya. Thermal receipt 58mm via `window.print()` dengan CSS print media query |
+| **Apa itu breakdown_json?** | JSON persisted di sheet shifts (kolom 15) yang menyimpan rincian per metode pembayaran & kategori pengeluaran — admin bisa lihat detail historis tanpa recompute |
+| **Apa itu ETag-style incremental sync?** | Client mengirim hash data ke server. Jika sama, server hanya mengembalikan `{ noChange: true }` — bandwidth polling turun ~70% |
 
 ---
 
@@ -835,7 +1175,7 @@ tidak ke-rekap di card.
 - Card `kasPenerimaan` render dari `res.total_penerimaan`
 - Label dinamis: "Penerimaan Shift Ini" / "Penerimaan Hari Ini" /
   "Penerimaan Hari Ini (Riwayat)" sesuai role + scope
-- Subtitle realtime: `Tunai Rp X • Non-Tunai Rp Y`
+- Subtitle realtime: `Tunai Rp X · Non-Tunai Rp Y`
 - Helper `refreshKasIfVisible()` dipanggil setelah `createTransaction`
   & `lunasDanAmbil` agar card sinkron tanpa refresh manual
 
@@ -960,8 +1300,8 @@ Kontribusi terbuka untuk siapa saja yang ingin meningkatkan sistem ini.
 
 ```bash
 # Fork & clone
-git clone https://github.com/<your-username>/kucucikan-laundry-gas.git
-cd kucucikan-laundry-gas
+git clone https://github.com/<your-username>/kucucikan-laundry-migrate.git
+cd kucucikan-laundry-migrate
 
 # Buat branch fitur
 git checkout -b feat/nama-fitur
@@ -1020,9 +1360,10 @@ _Built with care for laundry operations that demand speed, accuracy, and account
 [![Zero Cost](https://img.shields.io/badge/infra_cost-%240%2Fmonth-22C55E?style=flat-square)](#)
 [![Asia/Jakarta](https://img.shields.io/badge/timezone-Asia%2FJakarta-8B5CF6?style=flat-square)](#)
 [![v2.9](https://img.shields.io/badge/release-v2.9-2563EB?style=flat-square)](#-changelog)
+[![GitHub](https://img.shields.io/badge/GitHub-nndda--rzn-181717?style=flat-square&logo=github&logoColor=white)](https://github.com/nndda-rzn/kucucikan-laundry-migrate)
 
 <br />
 
-[⬆ Kembali ke atas](#kucucikan-laundry-pos)
+[Back to top](#kucucikan-laundry-pos)
 
 </div>
