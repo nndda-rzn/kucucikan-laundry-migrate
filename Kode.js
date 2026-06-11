@@ -1624,24 +1624,44 @@ function savePengeluaran(token, keterangan, kategori, jumlah, dateStr) {
 }
 
 function deletePengeluaran(token, id) {
-  validateAdminSession_(token); // Only Admin can delete
+  const session = validateSession_(token);
   const lock = LockService.getScriptLock();
   try {
     lock.waitLock(3000);
     const sheet = getSheet("pengeluaran");
     const data = sheet.getDataRange().getValues();
+    let rowIndex = -1;
+    let targetRow = null;
     for (let i = 1; i < data.length; i++) {
       if (data[i][0] === id) {
-        sheet.deleteRow(i + 1);
-        // [PERF] Invalidate semua cache shift summary — pengeluaran lintas shift,
-        // tidak tahu shift mana yang terdampak. Operasi delete jarang, aman flush all.
-        try { _flushAllShiftSummaryCache_(); } catch (e) { /* silent */ }
-        invalidateKasCache_();
-        invalidateReportCache_();
-        return { success: true };
+        rowIndex = i + 1;
+        targetRow = data[i];
+        break;
       }
     }
-    return { success: false, message: "Data tidak ditemukan." };
+    if (rowIndex === -1) {
+      return { success: false, message: "Data tidak ditemukan." };
+    }
+
+    // Kasir: hanya boleh hapus pengeluaran sendiri dalam shift aktif
+    if (session.role !== "admin") {
+      const ownerKasir = String(targetRow[5] || "");
+      if (ownerKasir !== session.username) {
+        return { success: false, message: "Anda hanya bisa menghapus pengeluaran sendiri." };
+      }
+      const activeShift = getActiveShift_(session.username);
+      if (!activeShift) {
+        return { success: false, message: "Buka shift dulu sebelum menghapus pengeluaran." };
+      }
+    }
+
+    sheet.deleteRow(rowIndex);
+    // [PERF] Invalidate semua cache shift summary — pengeluaran lintas shift,
+    // tidak tahu shift mana yang terdampak. Operasi delete jarang, aman flush all.
+    try { _flushAllShiftSummaryCache_(); } catch (e) { /* silent */ }
+    invalidateKasCache_();
+    invalidateReportCache_();
+    return { success: true };
   } catch (e) {
     logError("deletePengeluaran", e.message);
     return { success: false, message: "Gagal menghapus pengeluaran: " + e.message };
