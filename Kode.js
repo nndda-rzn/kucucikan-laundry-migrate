@@ -79,7 +79,7 @@ const PRICE_MAP_TTL = 300; // 5 menit
 function getPackagePriceMap_() {
   // Memory cache (per execution) — gratis & paling cepat
   const now = Date.now();
-  if (_priceMapMem && now - _priceMapMemTs < 60000) {
+  if (_priceMapMem && now - _priceMapMemTs < 300000) {
     return _priceMapMem;
   }
   // Script cache — antar execution
@@ -119,7 +119,7 @@ function invalidatePriceMapCache_() {
 const TRANSACTIONS_VERSION_KEY = "transactions_cache_version";
 const KAS_CACHE_VERSION_KEY = "kas_cache_version";
 const REPORT_CACHE_VERSION_KEY = "report_cache_version";
-const CACHE_VERSION_TTL = 21600; // 6 jam, batas maksimum CacheService
+const CACHE_VERSION_TTL = 3600; // 1 jam — spread renewal events, avoid thundering herd
 const _cacheVersionMem = {};
 
 function getCacheVersion_(key) {
@@ -878,9 +878,9 @@ function lunasDanAmbil(token, id, metode) {
     for (let i = 0; i < ids.length; i++) {
       if (ids[i][0] === id) {
         const row = i + 2;
-        const total = parseInt(sheet.getRange(row, 6).getValue()) || 0;
-        // [SHIFT] Lebar baris diperluas ke 23 kolom (termasuk pelunasan_shift_id)
+        // [PERF] Baca 23 kolom sekali saja — total diambil dari rowData[5]
         const rowData = sheet.getRange(row, 1, 1, 23).getValues()[0];
+        const total = parseInt(rowData[5]) || 0;
 
         let currentDp = parseInt(rowData[19]);
         // Fallback untuk data lama yang belum punya nominal_dp (ambil dari terbayar)
@@ -987,16 +987,48 @@ function getCustomers(token) {
 
 function saveOrUpdateCustomer(kasir, nama, wa, date) {
   if (!nama) return;
+  // [PERF] Coba cache customers_list dulu — hindari full name-scan di setiap transaksi.
+  const cacheKey = "customers_list";
+  const cache = CacheService.getScriptCache();
+  const cached = cache.get(cacheKey);
+  let existingId = null;
+  if (cached) {
+    try {
+      const list = JSON.parse(cached);
+      const lowerNama = String(nama).trim().toLowerCase();
+      for (let i = 0; i < list.length; i++) {
+        if (String(list[i].nama || "").trim().toLowerCase() === lowerNama) {
+          existingId = list[i].id;
+          break;
+        }
+      }
+    } catch(e) {}
+  }
+
   const sheet = getSheet("customers");
   const lastRow = sheet.getLastRow();
-  if (lastRow > 1) {
+
+  if (existingId && lastRow > 1) {
+    // [PERF] Customer ada di cache — cari row by ID (column 1 scan, lebih ringan dari name scan)
+    const ids = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+    for (let i = 0; i < ids.length; i++) {
+      if (ids[i][0] === existingId) {
+        if (wa) {
+          sheet.getRange(i + 2, 3, 1, 2).setValues([[wa, date]]);
+        } else {
+          sheet.getRange(i + 2, 4).setValue(date);
+        }
+        return;
+      }
+    }
+  } else if (!existingId && lastRow > 1) {
+    // [PERF] Cache miss — fallback ke name scan (behavior lama)
     const names = sheet.getRange(2, 2, lastRow - 1, 1).getValues();
     for (let i = 0; i < names.length; i++) {
       if (
         String(names[i][0]).trim().toLowerCase() ===
         String(nama).trim().toLowerCase()
       ) {
-        // [OPT] Batch write 2 sel sekaligus agar lebih cepat
         if (wa) {
           sheet.getRange(i + 2, 3, 1, 2).setValues([[wa, date]]);
         } else {
@@ -1302,7 +1334,9 @@ function deletePromosSheet() {
 // MANAJEMEN KAS HARIAN
 // ==========================================
 
+let _kasSheetSetupDone = false;
 function setupKasSheet_() {
+  if (_kasSheetSetupDone) return;
   const ss = SpreadsheetApp.openById(getDbId_());
   if (!ss.getSheetByName("kas_awal")) {
     const s1 = ss.insertSheet("kas_awal");
@@ -1312,6 +1346,7 @@ function setupKasSheet_() {
     const s2 = ss.insertSheet("pengeluaran");
     s2.appendRow(["id", "tanggal", "keterangan", "kategori", "jumlah", "kasir"]);
   }
+  _kasSheetSetupDone = true;
 }
 
 function saveUangAwal(token, nominal, dateStr) {
@@ -2242,7 +2277,7 @@ function invalidateShiftSummaryCache_(shiftId) {
   } catch (e) { /* silent */ }
 }
 
-function computeShiftSummary_(shiftId, modalAwal) {
+function computeShiftSummary_(shiftId, modalAwal, shiftInfo) {
   // Check cache first (memory → ScriptCache)
   if (shiftId) {
     const now = Date.now();
@@ -2259,7 +2294,7 @@ function computeShiftSummary_(shiftId, modalAwal) {
       }
     } catch (e) { /* cache corrupt → recompute */ }
   }
-  const result = _computeShiftSummaryRaw_(shiftId, modalAwal);
+  const result = _computeShiftSummaryRaw_(shiftId, modalAwal, shiftInfo);
   if (shiftId) {
     const now = Date.now();
     _shiftSummaryMem[shiftId] = { value: result, ts: now };
@@ -2278,7 +2313,7 @@ function computeShiftSummary_(shiftId, modalAwal) {
   return result;
 }
 
-function _computeShiftSummaryRaw_(shiftId, modalAwal) {
+function _computeShiftSummaryRaw_(shiftId, modalAwal, shiftInfo) {
   const trxSheet = getSheet("transactions");
   const lastRow = trxSheet.getLastRow();
   let totalTransaksi = 0; // grand total nilai transaksi di shift ini
@@ -2357,24 +2392,32 @@ function _computeShiftSummaryRaw_(shiftId, modalAwal) {
     "Lain-lain": { jumlah: 0, count: 0 },
   };
   try {
-    const shiftSheet = getSheet("shifts");
-    const lastRowShifts = shiftSheet.getLastRow();
+    // [PERF] Gunakan shiftInfo yang sudah di-pass dari caller jika ada,
+    // hindari baca ulang shifts sheet.
     let waktuMulai = null;
     let waktuSelesai = null;
     let username = "";
-    if (lastRowShifts > 1) {
-      // [PERF] Cari shift dengan range-bound (max 200 shift terakhir)
-      const shiftRowCount = Math.min(200, lastRowShifts - 1);
-      const shiftStartRow = lastRowShifts - shiftRowCount + 1;
-      const shiftData = shiftSheet
-        .getRange(shiftStartRow, 1, shiftRowCount, 5)
-        .getValues();
-      for (let i = shiftData.length - 1; i >= 0; i--) {
-        if (shiftData[i][0] === shiftId) {
-          waktuMulai = shiftData[i][3] ? new Date(shiftData[i][3]) : null;
-          waktuSelesai = shiftData[i][4] ? new Date(shiftData[i][4]) : null;
-          username = String(shiftData[i][1] || "");
-          break;
+    if (shiftInfo) {
+      waktuMulai = shiftInfo.waktu_mulai ? new Date(shiftInfo.waktu_mulai) : null;
+      waktuSelesai = shiftInfo.waktu_selesai ? new Date(shiftInfo.waktu_selesai) : null;
+      username = String(shiftInfo.username || "");
+    } else {
+      const shiftSheet = getSheet("shifts");
+      const lastRowShifts = shiftSheet.getLastRow();
+      if (lastRowShifts > 1) {
+        // [PERF] Cari shift dengan range-bound (max 200 shift terakhir)
+        const shiftRowCount = Math.min(200, lastRowShifts - 1);
+        const shiftStartRow = lastRowShifts - shiftRowCount + 1;
+        const shiftData = shiftSheet
+          .getRange(shiftStartRow, 1, shiftRowCount, 5)
+          .getValues();
+        for (let i = shiftData.length - 1; i >= 0; i--) {
+          if (shiftData[i][0] === shiftId) {
+            waktuMulai = shiftData[i][3] ? new Date(shiftData[i][3]) : null;
+            waktuSelesai = shiftData[i][4] ? new Date(shiftData[i][4]) : null;
+            username = String(shiftData[i][1] || "");
+            break;
+          }
         }
       }
     }
@@ -2463,7 +2506,13 @@ function closeShift(token, shiftId, catatan) {
 
     // [PERF] Invalidate cache sebelum compute — pastikan summary final fresh
     invalidateShiftSummaryCache_(shiftId);
-    const summary = computeShiftSummary_(shiftId, modalAwal);
+    // [PERF] Pass shift row data supaya computeShiftSummary_ tidak baca ulang shifts sheet
+    const shiftInfo = {
+      waktu_mulai: data[rowIndex - 1][3],
+      waktu_selesai: data[rowIndex - 1][4],
+      username: data[rowIndex - 1][1],
+    };
+    const summary = computeShiftSummary_(shiftId, modalAwal, shiftInfo);
     const now = new Date().toISOString();
 
     // [SHIFT] Persist breakdown JSON untuk pembukuan rinci shift lama.
@@ -2533,7 +2582,13 @@ function forceCloseShift(token, shiftId, catatan) {
 
     // [PERF] Invalidate cache sebelum compute — pastikan summary final fresh
     invalidateShiftSummaryCache_(shiftId);
-    const summary = computeShiftSummary_(shiftId, modalAwal);
+    // [PERF] Pass shift row data supaya computeShiftSummary_ tidak baca ulang shifts sheet
+    const shiftInfo = {
+      waktu_mulai: data[rowIndex - 1][3],
+      waktu_selesai: data[rowIndex - 1][4],
+      username: data[rowIndex - 1][1],
+    };
+    const summary = computeShiftSummary_(shiftId, modalAwal, shiftInfo);
     const now = new Date().toISOString();
     const noteFinal = (catatan ? catatan + " — " : "") + "[Force-closed by admin]";
 

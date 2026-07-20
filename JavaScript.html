@@ -28,8 +28,23 @@
   let pendingPelunasanId = null; // [FIX] Deklarasi eksplisit
   let currentShift = null; // Shift state
   let transactionsHash = null; // [OPT] ETag for incremental sync
+  let _sortedTransactions = []; // [OPT] Memoized sorted copy of allTransactions
   let isDashboardBootstrapping = false; // [PERF] Hindari RPC ganda saat initial render
   let isTransactionsLoading = false; // [PERF] Cegah refresh transaksi dobel saat modal ditutup
+
+  // [PERF-CACHE] DOM element caches — lazily initialized on first use
+  let _cachedSections = null;
+  let _cachedNavBtns = null;
+  let _cachedMobNavBtns = null;
+
+  let _payEl = null;
+  let _payInitialized = false;
+
+  let _settingsEl = null;
+  let _settingsInitialized = false;
+
+  let _notaEl = null;
+  let _notaInitialized = false;
 
   // [OPT] IndexedDB helper for persistent client-side cache
   const trxDB = {
@@ -146,6 +161,76 @@
       return response.data;
     }
     return Array.isArray(response) ? response : [];
+  }
+
+  // [OPT] Memoize sorted transactions — sort once when allTransactions changes
+  function _rebuildSortedTransactions() {
+    _sortedTransactions = allTransactions.slice().sort((a, b) => {
+      let da = new Date(a.tanggal).getTime();
+      let db = new Date(b.tanggal).getTime();
+      return (isNaN(db) ? 0 : db) - (isNaN(da) ? 0 : da);
+    });
+  }
+
+  // [OPT] #14 — Fire 5 independent RPCs in parallel when getDashboardBundle fails.
+  // Each callback handles its own result independently.
+  function _fireFallbackCalls() {
+    var _pending = 5;
+    function _done() { _pending--; if (_pending <= 0) showLoading(false); }
+
+    // 1. Settings
+    google.script.run
+      .withSuccessHandler(function(data) {
+        if (data) {
+          data._ts = Date.now();
+          try { localStorage.setItem("l_premium_settings_cache", JSON.stringify(data)); } catch(e) {}
+          applySettingsToUI(data);
+        }
+        _done();
+      })
+      .withFailureHandler(_done)
+      .getSettings();
+
+    // 2. Transactions
+    google.script.run
+      .withSuccessHandler(function(data) {
+        if (data) {
+          allTransactions = unwrapTransactionsResponse(data);
+          _rebuildSortedTransactions();
+          transactionsCacheTime = Date.now();
+          updateOverviewStats();
+          updateRecentActivity();
+          var refreshEl = document.getElementById("lastRefresh");
+          if (refreshEl) refreshEl.innerText = "Diperbarui: " + new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
+        }
+        _done();
+      })
+      .withFailureHandler(_done)
+      .getTransactions(currentUser.token, transactionsHash);
+
+    // 3. Packages
+    google.script.run
+      .withSuccessHandler(function(data) { setPackagesData(data || []); _done(); })
+      .withFailureHandler(_done)
+      .getPackages(currentUser.token);
+
+    // 4. Customers
+    google.script.run
+      .withSuccessHandler(function(data) {
+        if (data) { allCustomers = data; customersCacheTime = Date.now(); }
+        _done();
+      })
+      .withFailureHandler(_done)
+      .getCustomers(currentUser.token);
+
+    // 5. Active Shift
+    google.script.run
+      .withSuccessHandler(function(res) {
+        if (res && res.success) { currentShift = res.data; updateShiftBanner(); enforceShiftGuard(); }
+        _done();
+      })
+      .withFailureHandler(_done)
+      .getActiveShiftAPI(currentUser.token);
   }
 
   function renderPackageSelect(pkgData) {
@@ -381,10 +466,11 @@
       dd.classList.add("hidden");
       return;
     }
+    // [OPT] #19 — Only collect nama+whatsapp for autocomplete; strip terakhir_order
     const matches = [];
     for (let i = 0; i < allCustomers.length; i++) {
       if (allCustomers[i].nama.toLowerCase().includes(val))
-        matches.push(allCustomers[i]);
+        matches.push({ nama: allCustomers[i].nama, whatsapp: allCustomers[i].whatsapp });
     }
     if (matches.length === 0) {
       dd.classList.add("hidden");
@@ -664,29 +750,49 @@
 
     document.title = displayAppName + " System";
 
-    document.getElementById("sidebarTitle").innerText =
-      escapeHTML(displayAppName);
-    const loginAppName = document.getElementById("loginAppName");
-    if (loginAppName) loginAppName.innerText = escapeHTML(displayAppName);
+    if (!_settingsInitialized) {
+      _settingsEl = {
+        sidebarTitle: document.getElementById("sidebarTitle"),
+        loginAppName: document.getElementById("loginAppName"),
+        loginFooterText: document.getElementById("loginFooterText"),
+        loginAppNameMobile: document.getElementById("loginAppNameMobile"),
+        loginFooterTextMobile: document.getElementById("loginFooterTextMobile"),
+        loginLogoBox: document.getElementById("loginLogoBox"),
+        loginLogoText: document.getElementById("loginLogoText"),
+        loginLogoImg: document.getElementById("loginLogoImg"),
+        sidebarLogoBox: document.getElementById("sidebarLogoBox"),
+        sidebarLogoText: document.getElementById("sidebarLogoText"),
+        sidebarLogoImg: document.getElementById("sidebarLogoImg"),
+        infoBankName: document.getElementById("infoBankName"),
+        infoBankRek: document.getElementById("infoBankRek"),
+        infoBankAN: document.getElementById("infoBankAN"),
+        modalBankName: document.getElementById("modalBankName"),
+        modalBankRek: document.getElementById("modalBankRek"),
+        modalBankAN: document.getElementById("modalBankAN"),
+        infoBankName2: document.getElementById("infoBankName2"),
+        infoBankRek2: document.getElementById("infoBankRek2"),
+        infoBankAN2: document.getElementById("infoBankAN2"),
+      };
+      _settingsInitialized = true;
+    }
+    const e = _settingsEl;
 
-    const loginFooterText = document.getElementById("loginFooterText");
-    if (loginFooterText)
-      loginFooterText.innerText =
+    e.sidebarTitle.innerText = escapeHTML(displayAppName);
+    if (e.loginAppName) e.loginAppName.innerText = escapeHTML(displayAppName);
+
+    if (e.loginFooterText)
+      e.loginFooterText.innerText =
         "© " +
         new Date().getFullYear() +
         " " +
         escapeHTML(displayAppName) +
         " System";
 
-    const loginAppNameMobile = document.getElementById("loginAppNameMobile");
-    if (loginAppNameMobile)
-      loginAppNameMobile.innerText = escapeHTML(displayAppName);
+    if (e.loginAppNameMobile)
+      e.loginAppNameMobile.innerText = escapeHTML(displayAppName);
 
-    const loginFooterTextMobile = document.getElementById(
-      "loginFooterTextMobile",
-    );
-    if (loginFooterTextMobile)
-      loginFooterTextMobile.innerText =
+    if (e.loginFooterTextMobile)
+      e.loginFooterTextMobile.innerText =
         "© " +
         new Date().getFullYear() +
         " " +
@@ -697,10 +803,7 @@
     const initialText1 = displayAppName.charAt(0).toUpperCase();
     const initialText2 = displayAppName.substring(0, 2).toUpperCase() || "LP";
 
-    const updateLogo = (boxId, textId, imgId, initialLength = 1) => {
-      const box = document.getElementById(boxId);
-      const text = document.getElementById(textId);
-      const img = document.getElementById(imgId);
+    const updateLogo = (box, text, img, initialLength = 1) => {
       if (!box || !text || !img) return;
 
       if (logoUrl) {
@@ -720,8 +823,8 @@
         text.classList.remove("hidden");
         text.innerText = initialLength === 2 ? initialText2 : initialText1;
         box.classList.remove("bg-transparent");
-        if (boxId === "loginLogoBox") box.classList.add("bg-blue-600");
-        if (boxId === "sidebarLogoBox")
+        if (box === e.loginLogoBox) box.classList.add("bg-blue-600");
+        if (box === e.sidebarLogoBox)
           box.classList.add(
             "bg-gradient-to-br",
             "from-blue-600",
@@ -730,33 +833,18 @@
       }
     };
 
-    updateLogo("loginLogoBox", "loginLogoText", "loginLogoImg", 2);
-    updateLogo("sidebarLogoBox", "sidebarLogoText", "sidebarLogoImg", 1);
+    updateLogo(e.loginLogoBox, e.loginLogoText, e.loginLogoImg, 2);
+    updateLogo(e.sidebarLogoBox, e.sidebarLogoText, e.sidebarLogoImg, 1);
 
-    document.getElementById("infoBankName").innerText = escapeHTML(
-      appSettings.bank_name,
-    );
-    document.getElementById("infoBankRek").innerText = escapeHTML(
-      appSettings.bank_rek,
-    );
-    document.getElementById("infoBankAN").innerText = escapeHTML(
-      appSettings.bank_an,
-    );
-    document.getElementById("modalBankName").innerText = escapeHTML(
-      appSettings.bank_name,
-    );
-    document.getElementById("modalBankRek").innerText = escapeHTML(
-      appSettings.bank_rek,
-    );
-    document.getElementById("modalBankAN").innerText = escapeHTML(
-      appSettings.bank_an,
-    );
-    const bn2 = document.getElementById("infoBankName2");
-    const br2 = document.getElementById("infoBankRek2");
-    const ba2 = document.getElementById("infoBankAN2");
-    if (bn2) bn2.innerText = escapeHTML(appSettings.bank_name);
-    if (br2) br2.innerText = escapeHTML(appSettings.bank_rek);
-    if (ba2) ba2.innerText = escapeHTML(appSettings.bank_an);
+    e.infoBankName.innerText = escapeHTML(appSettings.bank_name);
+    e.infoBankRek.innerText = escapeHTML(appSettings.bank_rek);
+    e.infoBankAN.innerText = escapeHTML(appSettings.bank_an);
+    e.modalBankName.innerText = escapeHTML(appSettings.bank_name);
+    e.modalBankRek.innerText = escapeHTML(appSettings.bank_rek);
+    e.modalBankAN.innerText = escapeHTML(appSettings.bank_an);
+    if (e.infoBankName2) e.infoBankName2.innerText = escapeHTML(appSettings.bank_name);
+    if (e.infoBankRek2) e.infoBankRek2.innerText = escapeHTML(appSettings.bank_rek);
+    if (e.infoBankAN2) e.infoBankAN2.innerText = escapeHTML(appSettings.bank_an);
   }
 
   function saveAppSettings() {
@@ -940,6 +1028,7 @@
               .withSuccessHandler(function(txData) {
                 if (txData) {
                   allTransactions = unwrapTransactionsResponse(txData);
+                  _rebuildSortedTransactions();
                   transactionsCacheTime = Date.now();
                   updateOverviewStats();
                   updateRecentActivity();
@@ -947,7 +1036,7 @@
                   if (refreshEl) refreshEl.innerText = "Diperbarui: " + new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
                 }
               })
-              .getTransactions(currentUser.token);
+              .getTransactions(currentUser.token, transactionsHash);
 
             google.script.run
               .withSuccessHandler(function(custData) {
@@ -971,66 +1060,10 @@
                     } catch(e) {}
                     applySettingsToUI(settingsData);
                   }
-                  const txData = bundle.transactions;
-                  if (txData) {
-                    allTransactions = unwrapTransactionsResponse(txData);
-                    transactionsCacheTime = Date.now();
-                    updateOverviewStats();
-                    updateRecentActivity();
-                    const refreshEl = document.getElementById("lastRefresh");
-                    if (refreshEl) refreshEl.innerText = "Diperbarui: " + new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
-                  }
-                  const pkgData = bundle.packages;
-                  if (pkgData) setPackagesData(pkgData);
-                  const custData = bundle.customers;
-                  if (custData) {
-                    allCustomers = custData;
-                    customersCacheTime = Date.now();
-                  }
-                  if (bundle.activeShift !== undefined) {
-                    currentShift = bundle.activeShift;
-                    updateShiftBanner();
-                  }
-                } else {
-                  loadSettings();
-                  loadTransactions(true, true);
-                  fetchPaket();
-                  fetchCustomers(true);
-                google.script.run.withSuccessHandler(res => {
-                  if (res && res.success) { currentShift = res.data; updateShiftBanner(); enforceShiftGuard(); }
-                }).getActiveShiftAPI(currentUser.token);
-                }
-              })
-              .withFailureHandler(function(err) {
-                showLoading(false);
-                loadSettings();
-                loadTransactions(true, true);
-                fetchPaket();
-                fetchCustomers(true);
-                google.script.run.withSuccessHandler(res => {
-                  if (res && res.success) { currentShift = res.data; updateShiftBanner(); }
-                }).getActiveShiftAPI(currentUser.token);
-              })
-              .getDashboardBundle(currentUser.token);
-          }
-        })
-        .withFailureHandler(function(err) {
-          showLoading(false);
-          // Fallback ke getDashboardBundle jika fast bundle call gagal
-          google.script.run
-            .withSuccessHandler(function(bundle) {
-              if (bundle && bundle.success) {
-                const settingsData = bundle.settings;
-                if (settingsData) {
-                  settingsData._ts = Date.now();
-                  try {
-                    localStorage.setItem("l_premium_settings_cache", JSON.stringify(settingsData));
-                  } catch(e) {}
-                  applySettingsToUI(settingsData);
-                }
                 const txData = bundle.transactions;
                 if (txData) {
                   allTransactions = unwrapTransactionsResponse(txData);
+                  _rebuildSortedTransactions();
                   transactionsCacheTime = Date.now();
                   updateOverviewStats();
                   updateRecentActivity();
@@ -1050,25 +1083,60 @@
                   enforceShiftGuard();
                 }
               } else {
-                loadSettings();
-                loadTransactions(true, true);
-                fetchPaket();
-                fetchCustomers(true);
-                google.script.run.withSuccessHandler(res => {
-                  if (res && res.success) { currentShift = res.data; updateShiftBanner(); }
-                }).getActiveShiftAPI(currentUser.token);
+                _fireFallbackCalls();
               }
             })
             .withFailureHandler(function(err2) {
-              loadSettings();
-              loadTransactions(true, true);
-              fetchPaket();
-              fetchCustomers(true);
-              google.script.run.withSuccessHandler(res => {
-                if (res && res.success) { currentShift = res.data; updateShiftBanner(); }
-              }).getActiveShiftAPI(currentUser.token);
+              _fireFallbackCalls();
             })
             .getDashboardBundle(currentUser.token);
+          }
+        })
+        .withFailureHandler(function(err) {
+          showLoading(false);
+          // Fallback ke getDashboardBundle jika fast bundle call gagal
+          google.script.run
+            .withSuccessHandler(function(bundle) {
+              if (bundle && bundle.success) {
+                const settingsData = bundle.settings;
+                if (settingsData) {
+                  settingsData._ts = Date.now();
+                  try {
+                    localStorage.setItem("l_premium_settings_cache", JSON.stringify(settingsData));
+                  } catch(e) {}
+                  applySettingsToUI(settingsData);
+                }
+                const txData = bundle.transactions;
+                if (txData) {
+                    allTransactions = unwrapTransactionsResponse(txData);
+                    _rebuildSortedTransactions();
+                    transactionsCacheTime = Date.now();
+                    updateOverviewStats();
+                    updateRecentActivity();
+                    const refreshEl = document.getElementById("lastRefresh");
+                    if (refreshEl) refreshEl.innerText = "Diperbarui: " + new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
+                  }
+                  const pkgData = bundle.packages;
+                  if (pkgData) setPackagesData(pkgData);
+                  const custData = bundle.customers;
+                  if (custData) {
+                    allCustomers = custData;
+                    customersCacheTime = Date.now();
+                  }
+                  if (bundle.activeShift !== undefined) {
+                    currentShift = bundle.activeShift;
+                    updateShiftBanner();
+                    enforceShiftGuard();
+                  }
+                } else {
+                  _fireFallbackCalls();
+                }
+              })
+              .withFailureHandler(function(err) {
+                showLoading(false);
+                _fireFallbackCalls();
+              })
+              .getDashboardBundle(currentUser.token);
         })
         .getDashboardBundleFast(currentUser.token, hasFreshPackagesCache);
 
@@ -1254,6 +1322,7 @@
     try { sessionStorage.removeItem("trx_cache_v1"); } catch (e) {}
     transactionsCacheTime = 0;
     allTransactions = [];
+    _sortedTransactions = [];
     allCustomers = [];
     allPackages = [];
     // [OPT] Hentikan semua interval
@@ -1337,10 +1406,12 @@
   }
 
   function _doShowSection(name) {
-    const sections = document.querySelectorAll(".section");
+    if (!_cachedSections) _cachedSections = document.querySelectorAll(".section");
+    const sections = _cachedSections;
     for (let i = 0; i < sections.length; i++)
       sections[i].classList.add("hidden");
-    const navBtns = document.querySelectorAll(".nav-btn");
+    if (!_cachedNavBtns) _cachedNavBtns = document.querySelectorAll(".nav-btn");
+    const navBtns = _cachedNavBtns;
     for (let i = 0; i < navBtns.length; i++) {
       navBtns[i].classList.remove("bg-blue-50", "text-blue-700", "font-bold");
       navBtns[i].classList.add("text-slate-500", "font-medium");
@@ -1352,7 +1423,8 @@
         icon.classList.add("text-slate-400", "group-hover:text-blue-500");
       }
     }
-    const mobBtns = document.querySelectorAll(".mob-nav-btn");
+    if (!_cachedMobNavBtns) _cachedMobNavBtns = document.querySelectorAll(".mob-nav-btn");
+    const mobBtns = _cachedMobNavBtns;
     for (let i = 0; i < mobBtns.length; i++)
       mobBtns[i].classList.remove("text-blue-600");
 
@@ -1938,6 +2010,7 @@
       trxDB.load().then(cached => {
         if (cached && cached.data && now - cached.ts < TRX_CACHE_TTL * 10) {
           allTransactions = cached.data;
+          _rebuildSortedTransactions();
           transactionsHash = cached.hash;
           transactionsCacheTime = cached.ts;
           updateOverviewStats();
@@ -1953,6 +2026,7 @@
               const parsed = JSON.parse(ssCached);
               if (parsed && parsed.data && parsed._ts && now - parsed._ts < TRX_CACHE_TTL * 3) {
                 allTransactions = parsed.data;
+                _rebuildSortedTransactions();
                 transactionsCacheTime = parsed._ts;
                 updateOverviewStats();
                 updateRecentActivity();
@@ -2002,6 +2076,7 @@
 
         const txData = unwrapTransactionsResponse(data);
         allTransactions = txData;
+        _rebuildSortedTransactions();
         transactionsCacheTime = Date.now();
 
         // [OPT] Fallback hash untuk response lama tanpa hash server.
@@ -2268,8 +2343,8 @@
     }
 
     const filteredData = [];
-    for (let i = 0; i < allTransactions.length; i++) {
-      const tr = allTransactions[i];
+    for (let i = 0; i < _sortedTransactions.length; i++) {
+      const tr = _sortedTransactions[i];
       const custName = tr.customer ? tr.customer.toLowerCase() : "";
       const paketName = tr.paket ? tr.paket.toLowerCase() : "";
       const statusName = tr.status ? tr.status.toLowerCase() : "";
@@ -2385,12 +2460,7 @@
       return;
     }
 
-    dataToRender.sort((a, b) => {
-      let da = new Date(a.tanggal).getTime();
-      let db = new Date(b.tanggal).getTime();
-      return (isNaN(db) ? 0 : db) - (isNaN(da) ? 0 : da);
-    });
-
+    // [OPT] Data already sorted via _sortedTransactions — skip re-sort
     const slicedData = dataToRender.slice(0, historyRenderLimit);
     let htmlString = "";
     for (let i = 0; i < slicedData.length; i++) {
@@ -2966,25 +3036,38 @@ Terima kasih.`;
   }
 
   function togglePayView() {
-    const v = document.getElementById("payMethod").value;
-    document.getElementById("viewTunai").classList.add("hidden");
-    document.getElementById("viewQRIS").classList.add("hidden");
-    document.getElementById("viewTransfer").classList.add("hidden");
-    document.getElementById("viewNanti").classList.add("hidden"); // [FIX] Sembunyikan viewNanti saat ganti metode
+    if (!_payInitialized) {
+      _payEl = {
+        payMethod: document.getElementById("payMethod"),
+        viewTunai: document.getElementById("viewTunai"),
+        viewQRIS: document.getElementById("viewQRIS"),
+        viewTransfer: document.getElementById("viewTransfer"),
+        viewNanti: document.getElementById("viewNanti"),
+        dpContainer: document.getElementById("dpContainer"),
+        checkDP: document.getElementById("checkDP"),
+      };
+      _payInitialized = true;
+    }
+    const e = _payEl;
+    const v = e.payMethod.value;
+    e.viewTunai.classList.add("hidden");
+    e.viewQRIS.classList.add("hidden");
+    e.viewTransfer.classList.add("hidden");
+    e.viewNanti.classList.add("hidden");
     if (v === "Tunai")
-      document.getElementById("viewTunai").classList.remove("hidden");
+      e.viewTunai.classList.remove("hidden");
     else if (v === "QRIS")
-      document.getElementById("viewQRIS").classList.remove("hidden");
+      e.viewQRIS.classList.remove("hidden");
     else if (v === "Transfer")
-      document.getElementById("viewTransfer").classList.remove("hidden");
+      e.viewTransfer.classList.remove("hidden");
 
     if (v === "Nanti") {
-      document.getElementById("dpContainer").classList.add("hidden");
-      document.getElementById("checkDP").checked = false;
+      e.dpContainer.classList.add("hidden");
+      e.checkDP.checked = false;
       toggleDPView();
-      document.getElementById("viewNanti").classList.remove("hidden"); // [FIX] Bug viewNanti: tampilkan feedback visual saat "Bayar Nanti" dipilih
+      e.viewNanti.classList.remove("hidden");
     } else {
-      document.getElementById("dpContainer").classList.remove("hidden");
+      e.dpContainer.classList.remove("hidden");
     }
   }
 
@@ -3409,28 +3492,51 @@ Terima kasih.`;
     if (!lastTransactionData) return;
     const d = new Date(lastTransactionData.tanggal);
     const est = new Date(lastTransactionData.estimasi);
-    document.getElementById("printNotaTitle").innerText = escapeHTML(
-      appSettings.nota_title,
-    );
-    document.getElementById("printNotaSubtitle").innerText = escapeHTML(
-      appSettings.nota_subtitle,
-    );
-    document.getElementById("printNotaFooter").innerText = escapeHTML(
-      appSettings.nota_footer,
-    );
-    document.getElementById("notaId").innerText = escapeHTML(
-      lastTransactionData.id,
-    );
-    // Tata Tertib
-    const ttWrap = document.getElementById("notaTatatertibWrap");
-    const ttEl = document.getElementById("printNotaTatatertib");
-    if (appSettings.nota_tatatertib && appSettings.nota_tatatertib.trim()) {
-      ttEl.innerText = appSettings.nota_tatatertib;
-      ttWrap.classList.remove("hidden");
-    } else {
-      ttWrap.classList.add("hidden");
+
+    if (!_notaInitialized) {
+      _notaEl = {
+        printNotaTitle: document.getElementById("printNotaTitle"),
+        printNotaSubtitle: document.getElementById("printNotaSubtitle"),
+        printNotaFooter: document.getElementById("printNotaFooter"),
+        notaId: document.getElementById("notaId"),
+        notaTatatertibWrap: document.getElementById("notaTatatertibWrap"),
+        printNotaTatatertib: document.getElementById("printNotaTatatertib"),
+        notaDate: document.getElementById("notaDate"),
+        notaKasir: document.getElementById("notaKasir"),
+        notaCust: document.getElementById("notaCust"),
+        notaItemsList: document.getElementById("notaItemsList"),
+        notaTotal: document.getElementById("notaTotal"),
+        notaEstimasi: document.getElementById("notaEstimasi"),
+        notaCatatanWrap: document.getElementById("notaCatatanWrap"),
+        notaCatatan: document.getElementById("notaCatatan"),
+        notaSubtotal: document.getElementById("notaSubtotal"),
+        notaDPContainer: document.getElementById("notaDPContainer"),
+        lblNotaDibayar: document.getElementById("lblNotaDibayar"),
+        lblNotaSisa: document.getElementById("lblNotaSisa"),
+        notaSisa: document.getElementById("notaSisa"),
+        notaDibayar: document.getElementById("notaDibayar"),
+        notaStatusBayar: document.getElementById("notaStatusBayar"),
+        btnSendWA: document.getElementById("btnSendWA"),
+        btnSendWAHint: document.getElementById("btnSendWAHint"),
+        notaModal: document.getElementById("notaModal"),
+      };
+      _notaInitialized = true;
     }
-    document.getElementById("notaDate").innerText = !isNaN(d)
+    const e = _notaEl;
+
+    e.printNotaTitle.innerText = escapeHTML(appSettings.nota_title);
+    e.printNotaSubtitle.innerText = escapeHTML(appSettings.nota_subtitle);
+    e.printNotaFooter.innerText = escapeHTML(appSettings.nota_footer);
+    e.notaId.innerText = escapeHTML(lastTransactionData.id);
+
+    if (appSettings.nota_tatatertib && appSettings.nota_tatatertib.trim()) {
+      e.printNotaTatatertib.innerText = appSettings.nota_tatatertib;
+      e.notaTatatertibWrap.classList.remove("hidden");
+    } else {
+      e.notaTatatertibWrap.classList.add("hidden");
+    }
+
+    e.notaDate.innerText = !isNaN(d)
       ? d.toLocaleDateString("id-ID", {
           day: "numeric",
           month: "short",
@@ -3439,12 +3545,8 @@ Terima kasih.`;
         ", " +
         d.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })
       : "-";
-    document.getElementById("notaKasir").innerText = escapeHTML(
-      lastTransactionData.kasir,
-    );
-    document.getElementById("notaCust").innerText = escapeHTML(
-      lastTransactionData.customer,
-    );
+    e.notaKasir.innerText = escapeHTML(lastTransactionData.kasir);
+    e.notaCust.innerText = escapeHTML(lastTransactionData.customer);
 
     let itemsHtml = ``;
     let subtotalReal = 0;
@@ -3473,11 +3575,11 @@ Terima kasih.`;
             `;
       subtotalReal = lastTransactionData.subtotal || lastTransactionData.total;
     }
-    document.getElementById("notaItemsList").innerHTML = itemsHtml;
+    e.notaItemsList.innerHTML = itemsHtml;
 
-    document.getElementById("notaTotal").innerText =
+    e.notaTotal.innerText =
       "Rp " + parseInt(lastTransactionData.total).toLocaleString("id-ID");
-    document.getElementById("notaEstimasi").innerText = !isNaN(est)
+    e.notaEstimasi.innerText = !isNaN(est)
       ? est.toLocaleDateString("id-ID", {
           day: "numeric",
           month: "short",
@@ -3485,89 +3587,73 @@ Terima kasih.`;
         })
       : "-";
 
-    // Catatan di Nota
-    const catatanWrap = document.getElementById("notaCatatanWrap");
-    const catatanEl = document.getElementById("notaCatatan");
     if (lastTransactionData.catatan) {
-      catatanEl.innerText = lastTransactionData.catatan;
-      catatanWrap.classList.remove("hidden");
+      e.notaCatatan.innerText = lastTransactionData.catatan;
+      e.notaCatatanWrap.classList.remove("hidden");
     } else {
-      catatanWrap.classList.add("hidden");
+      e.notaCatatanWrap.classList.add("hidden");
     }
 
-    // Subtotal di Nota
-    document.getElementById("notaSubtotal").innerText =
+    e.notaSubtotal.innerText =
       "Rp " + subtotalReal.toLocaleString("id-ID");
 
-    // DP logic & Reset Container
-    const dpContainer = document.getElementById("notaDPContainer");
-    if (dpContainer) {
+    if (e.notaDPContainer) {
       const total = parseInt(lastTransactionData.total) || 0;
       const terbayar = parseInt(lastTransactionData.terbayar) || 0;
       const nomDp = parseInt(lastTransactionData.nominal_dp) || 0;
       const nomPelunasan = parseInt(lastTransactionData.nominal_pelunasan) || 0;
 
-      const lblDibayar = document.getElementById("lblNotaDibayar");
-      const lblSisa = document.getElementById("lblNotaSisa");
-      const valSisa = document.getElementById("notaSisa");
-
       if (terbayar > 0 && terbayar < total) {
-        // SEDANG DP (Belum lunas)
-        document.getElementById("notaDibayar").innerText =
+        e.notaDibayar.innerText =
           "Rp " + terbayar.toLocaleString("id-ID");
-        valSisa.innerText = "Rp " + (total - terbayar).toLocaleString("id-ID");
+        e.notaSisa.innerText = "Rp " + (total - terbayar).toLocaleString("id-ID");
 
-        if (lblDibayar) lblDibayar.innerText = "Dibayar (DP)";
-        if (lblSisa) lblSisa.innerText = "Sisa Tagihan";
-        valSisa.parentElement.classList.remove("text-emerald-600");
-        valSisa.parentElement.classList.add("text-red-500");
+        if (e.lblNotaDibayar) e.lblNotaDibayar.innerText = "Dibayar (DP)";
+        if (e.lblNotaSisa) e.lblNotaSisa.innerText = "Sisa Tagihan";
+        e.notaSisa.parentElement.classList.remove("text-emerald-600");
+        e.notaSisa.parentElement.classList.add("text-red-500");
 
-        dpContainer.classList.remove("hidden");
+        e.notaDPContainer.classList.remove("hidden");
       } else if (nomDp > 0 && nomPelunasan > 0) {
-        // LUNAS SETELAH DP
-        document.getElementById("notaDibayar").innerText =
+        e.notaDibayar.innerText =
           "Rp " + nomDp.toLocaleString("id-ID");
-        valSisa.innerText = "Rp " + nomPelunasan.toLocaleString("id-ID");
+        e.notaSisa.innerText = "Rp " + nomPelunasan.toLocaleString("id-ID");
 
-        if (lblDibayar) lblDibayar.innerText = "Uang Muka (DP)";
-        if (lblSisa) lblSisa.innerText = "Pelunasan";
-        valSisa.parentElement.classList.remove("text-red-500");
-        valSisa.parentElement.classList.add("text-emerald-600");
+        if (e.lblNotaDibayar) e.lblNotaDibayar.innerText = "Uang Muka (DP)";
+        if (e.lblNotaSisa) e.lblNotaSisa.innerText = "Pelunasan";
+        e.notaSisa.parentElement.classList.remove("text-red-500");
+        e.notaSisa.parentElement.classList.add("text-emerald-600");
 
-        dpContainer.classList.remove("hidden");
+        e.notaDPContainer.classList.remove("hidden");
       } else {
-        dpContainer.classList.add("hidden");
+        e.notaDPContainer.classList.add("hidden");
       }
     }
 
-    const stBayar = document.getElementById("notaStatusBayar");
-    stBayar.innerText =
+    e.notaStatusBayar.innerText =
       escapeHTML(lastTransactionData.status_pembayaran) +
       " (" +
       escapeHTML(lastTransactionData.metode_pembayaran) +
       ")";
     if (lastTransactionData.status_pembayaran === "Lunas") {
-      stBayar.className =
+      e.notaStatusBayar.className =
         "text-center bg-emerald-50 text-emerald-700 py-1.5 rounded text-[10px] font-bold mb-6 border border-emerald-200 uppercase tracking-widest";
     } else {
-      stBayar.className =
+      e.notaStatusBayar.className =
         "text-center bg-red-50 text-red-600 py-1.5 rounded text-[10px] font-bold mb-6 border border-red-200 uppercase tracking-widest";
     }
 
-    const btnWA = document.getElementById("btnSendWA");
-    const btnWAHint = document.getElementById("btnSendWAHint");
     if (lastTransactionData.whatsapp) {
-      btnWA.classList.remove("hidden");
-      btnWA.classList.add("flex");
-      if (btnWAHint) btnWAHint.classList.add("hidden");
+      e.btnSendWA.classList.remove("hidden");
+      e.btnSendWA.classList.add("flex");
+      if (e.btnSendWAHint) e.btnSendWAHint.classList.add("hidden");
     } else {
-      btnWA.classList.remove("flex");
-      btnWA.classList.add("hidden");
-      // [UX] Tampilkan hint kenapa tombol WA tidak muncul
-      if (btnWAHint) btnWAHint.classList.remove("hidden");
+      e.btnSendWA.classList.remove("flex");
+      e.btnSendWA.classList.add("hidden");
+      if (e.btnSendWAHint) e.btnSendWAHint.classList.remove("hidden");
     }
-    document.getElementById("notaModal").classList.remove("hidden");
-    document.getElementById("notaModal").classList.add("flex");
+    e.notaModal.classList.remove("hidden");
+    e.notaModal.classList.add("flex");
   }
 
   let notaOpenedFrom = "overview";
