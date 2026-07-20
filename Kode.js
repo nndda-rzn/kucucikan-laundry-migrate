@@ -529,6 +529,14 @@ function login(username, password) {
           return { success: false, message: "Username atau password salah!" };
         }
 
+        // Password correct - enforce lock even with valid credentials
+        if (attempts && parseInt(attempts) >= 5) {
+          return {
+            success: false,
+            message: "Akun dikunci sementara. Coba lagi dalam 15 menit.",
+          };
+        }
+
         // Auto-migration to salted hash format if needed
         if (!dbPassword.includes(":")) {
           sheet.getRange(i + 1, 2).setValue(hashPassword(password));
