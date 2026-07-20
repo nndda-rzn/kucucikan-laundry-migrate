@@ -3950,6 +3950,7 @@ Terima kasih.`;
             isFirst ? parseInt(row.total).toLocaleString("id-ID") : "",
             isFirst ? row.status : "",
             isFirst ? row.status_pembayaran : "",
+            isFirst ? row.kasir : "",
           ]);
         }
       } else {
@@ -3961,6 +3962,7 @@ Terima kasih.`;
           parseInt(row.total).toLocaleString("id-ID"),
           row.status,
           row.status_pembayaran,
+          row.kasir,
         ]);
       }
     }
@@ -3974,6 +3976,7 @@ Terima kasih.`;
           "Total (Rp)",
           "Status",
           "Bayar",
+          "Kasir",
         ],
       ],
       body: tableRows,
