@@ -507,7 +507,11 @@ function login(username, password) {
   const cache = CacheService.getScriptCache();
   const attemptKey = "login_attempts_" + username;
   let attempts = cache.get(attemptKey);
-  if (attempts && parseInt(attempts) >= 5)
+  const attemptCount = attempts ? parseInt(attempts) : 0;
+
+  // [SEC] Lockout check ALWAYS runs first — regardless of password correctness.
+  // Prevents bypass where attacker submits correct credentials while locked.
+  if (attemptCount >= 5)
     return {
       success: false,
       message: "Akun dikunci sementara. Coba lagi dalam 15 menit.",
@@ -521,26 +525,25 @@ function login(username, password) {
       if (String(data[i][0]).trim().toLowerCase() === lowerUsername) {
         const dbPassword = String(data[i][1]).trim();
         if (!verifyPassword(password, dbPassword)) {
-          cache.put(
-            attemptKey,
-            (attempts ? parseInt(attempts) + 1 : 1).toString(),
-            900,
-          );
+          const newCount = attemptCount + 1;
+          cache.put(attemptKey, newCount.toString(), 900);
+          // Inform user immediately when account just got locked (5th failed attempt)
+          if (newCount >= 5) {
+            return {
+              success: false,
+              message: "Akun dikunci sementara. Coba lagi dalam 15 menit.",
+            };
+          }
           return { success: false, message: "Username atau password salah!" };
-        }
-
-        // Password correct - enforce lock even with valid credentials
-        if (attempts && parseInt(attempts) >= 5) {
-          return {
-            success: false,
-            message: "Akun dikunci sementara. Coba lagi dalam 15 menit.",
-          };
         }
 
         // Auto-migration to salted hash format if needed
         if (!dbPassword.includes(":")) {
           sheet.getRange(i + 1, 2).setValue(hashPassword(password));
         }
+
+        // Login berhasil — reset counter percobaan gagal
+        cache.remove(attemptKey);
 
         const token = Utilities.getUuid();
         const sessionData = JSON.stringify({
@@ -557,11 +560,15 @@ function login(username, password) {
         };
       }
     }
-    cache.put(
-      attemptKey,
-      (attempts ? parseInt(attempts) + 1 : 1).toString(),
-      900,
-    );
+    // Username tidak ditemukan — tetap increment untuk mencegah username enumeration
+    const newCount = attemptCount + 1;
+    cache.put(attemptKey, newCount.toString(), 900);
+    if (newCount >= 5) {
+      return {
+        success: false,
+        message: "Akun dikunci sementara. Coba lagi dalam 15 menit.",
+      };
+    }
     return { success: false, message: "Username atau password salah!" };
   } catch (error) {
     return { success: false, message: "Error Database: " + error.message };
