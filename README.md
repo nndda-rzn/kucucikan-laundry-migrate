@@ -1084,6 +1084,221 @@ Setelah `setupDatabase()` pertama kali dijalankan:
 
 ---
 
+## Troubleshooting
+
+<details>
+<summary><b>Error: "Exception: You do not have permission to call SpreadsheetApp.openById"</b></summary>
+
+**Penyebab:** Script belum diberi akses ke spreadsheet target.
+
+**Solusi:**
+1. Buka Apps Script Editor
+2. Jalankan fungsi `doGet()` atau `setupDashboard()` sekali secara manual
+3. Autorisasi akses saat diminta pop-up OAuth
+4. Refresh web app
+
+</details>
+
+<details>
+<summary><b>Error: "Service invoked too many times in a short time"</b></summary>
+
+**Penyebab:** Hit quota limit GAS (100 req/detik atau 6 menit exec time/hari free tier).
+
+**Solusi:**
+- Tunggu 1–5 menit sebelum retry
+- Kurangi frekuensi polling (ubah `POLL_INTERVAL` dari 60s ke 120s)
+- Aktifkan incremental sync (sudah default di v2.9+)
+- Upgrade ke Google Workspace (quota 20x lipat)
+
+</details>
+
+<details>
+<summary><b>Session Expired / Token Invalid</b></summary>
+
+**Penyebab:** Token session habis (TTL 8 jam) atau Script Properties corrupt.
+
+**Solusi:**
+1. Logout dan login ulang
+2. Jika masih error, buka Apps Script Editor → jalankan `clearAllSessions()` di console
+3. Clear browser cookies untuk domain script.google.com
+
+</details>
+
+<details>
+<summary><b>Data Tidak Sinkron / Card Transaksi Stuck</b></summary>
+
+**Penyebab:** Cache client/server tidak match atau LockService timeout.
+
+**Solusi:**
+1. Hard refresh browser (`Ctrl+Shift+R` / `Cmd+Shift+R`)
+2. Buka DevTools console, jalankan: `localStorage.clear(); location.reload();`
+3. Jika masih stuck, admin bisa force-invalidate cache via Apps Script: `CacheService.getScriptCache().removeAll(['transactions', 'customers', 'packages'])`
+
+</details>
+
+<details>
+<summary><b>Shift Tidak Bisa Di-Close (Error 500)</b></summary>
+
+**Penyebab:** Ada row duplikat di sheet `shifts` atau breakdown_json rusak.
+
+**Solusi:**
+1. Cek sheet `shifts`, cari row dengan `shift_id` sama dan status `Aktif` > 1
+2. Hapus duplikat secara manual (keep yang terbaru)
+3. Jalankan `recomputeShiftBreakdown(shiftId)` dari Apps Script console
+
+</details>
+
+<details>
+<summary><b>CRLF Line Ending Breaks Inline Script</b></summary>
+
+**Penyebab:** Git checkout convert LF → CRLF, GAS parser gagal parse `<script>` multiline.
+
+**Solusi:**
+- Sudah fixed via `.gitattributes` (`* text=auto eol=lf`)
+- Manual: `git config core.autocrlf false` → `git checkout -- .`
+
+</details>
+
+<details>
+<summary><b>WhatsApp Link Tidak Berfungsi di iOS</b></summary>
+
+**Penyebab:** iOS Safari tidak auto-encode URL params.
+
+**Solusi:**
+- Sudah fixed di v2.7+ dengan `encodeURIComponent()` wrapper
+- Fallback: copy link manual, paste di WhatsApp
+
+</details>
+
+---
+
+## Script Properties Configuration
+
+Script Properties menyimpan config global via `PropertiesService.getScriptProperties()`. Set via Apps Script Editor → **Project Settings → Script Properties**.
+
+| Key | Type | Required | Default | Keterangan |
+|-----|------|----------|---------|------------|
+| `DB_ID` | string | ✅ Yes | — | Spreadsheet ID (dari URL `https://docs.google.com/spreadsheets/d/{DB_ID}/`) |
+| `PERF_ENABLED` | boolean | ❌ No | `false` | Toggle performance logging ke sheet `perf_logs` dan Stackdriver |
+| `BACKUP_FOLDER_ID` | string | ❌ No | root | Google Drive folder ID untuk auto-backup harian |
+| `WHATSAPP_TEMPLATE_ENABLED` | boolean | ❌ No | `true` | Toggle WhatsApp quick link dengan template message |
+| `SESSION_TTL_HOURS` | number | ❌ No | `8` | Durasi session token sebelum expire (1–24 jam) |
+| `LOGIN_RATE_LIMIT_MINUTES` | number | ❌ No | `15` | Durasi lockout setelah 5x login gagal |
+| `CACHE_TTL_TRANSACTIONS` | number | ❌ No | `300` | Cache TTL (detik) untuk `getTransactions` |
+| `CACHE_TTL_CUSTOMERS` | number | ❌ No | `600` | Cache TTL (detik) untuk `getCustomers` |
+| `CACHE_TTL_PACKAGES` | number | ❌ No | `3600` | Cache TTL (detik) untuk `getPackages` |
+| `MAX_TRANSACTIONS_CACHE` | number | ❌ No | `300` | Jumlah max transaksi terbaru yang di-cache |
+
+**Contoh Setup:**
+```js
+// Jalankan sekali dari Apps Script Editor
+function setupScriptProperties() {
+  const props = PropertiesService.getScriptProperties();
+  props.setProperties({
+    'DB_ID': '1aBcDeFgHiJkLmNoPqRsTuVwXyZ1234567890',
+    'PERF_ENABLED': 'false',
+    'SESSION_TTL_HOURS': '8'
+  });
+  Logger.log('✅ Script Properties configured');
+}
+```
+
+---
+
+## Google Apps Script Quota & Limits
+
+| Resource | Free Tier | Google Workspace |
+|----------|-----------|------------------|
+| **Execution time per day** | 90 min/day | 6 hours/day |
+| **Triggers total runtime** | 90 min/day | 6 hours/day |
+| **Script runtime** | 6 min/execution | 6 min/execution |
+| **Concurrent executions** | 30 | 30 |
+| **URL Fetch calls** | 20,000/day | 100,000/day |
+| **URL Fetch data sent** | 100 MB/day | 100 MB/day |
+| **Spreadsheet cells read** | Unlimited | Unlimited |
+| **Spreadsheet cells written** | 10M cells/day | 10M cells/day |
+| **Properties read/write** | 50,000/day | 500,000/day |
+| **Lock wait time** | 30 seconds | 30 seconds |
+
+**Estimasi Kapasitas Kucucikan POS:**
+- **Transaksi per hari:** 500–1000 (avg 60 ms/transaksi = 1 jam exec time)
+- **Concurrent kasir:** 1–3 (polling 60s = 4,320 exec/day)
+- **Customer total:** 5,000–10,000 (batch load <3s)
+- **Sheet size max:** 50,000 rows per sheet (GAS performa mulai degradasi >100k rows)
+
+**Tips Menghemat Quota:**
+- Aktifkan incremental sync (default v2.9+)
+- Pakai cache agresif untuk master data (packages, customers)
+- Set `MAX_TRANSACTIONS_CACHE=300` (default) untuk balance performa vs freshness
+- Jalankan `dailyBackup()` via trigger jam 02:00 (bukan saat jam sibuk)
+- Disable perf logging di production (`PERF_ENABLED=false`)
+
+---
+
+## System Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                         Browser Client                       │
+│  ┌────────────────────────────────────────────────────────┐ │
+│  │  HTML5 + Tailwind CSS + Vanilla JS (ES2020)           │ │
+│  │  • Multi-page SPA (setupDashboard injects all views)   │ │
+│  │  • 60s polling with ETag-style incremental sync       │ │
+│  │  • Multi-layer cache (localStorage + in-memory Map)   │ │
+│  │  • Progressive bootstrap (customers load deferred)    │ │
+│  └─────────────────┬──────────────────────────────────────┘ │
+└────────────────────┼────────────────────────────────────────┘
+                     │ google.script.run (RPC over HTTPS)
+                     ▼
+┌─────────────────────────────────────────────────────────────┐
+│              Google Apps Script (V8 Runtime)                 │
+│  ┌────────────────────────────────────────────────────────┐ │
+│  │  Backend API (Code.gs + helpers)                       │ │
+│  │  • Token-based session (UUID + TTL 8h)                │ │
+│  │  • LockService untuk write atomicity                  │ │
+│  │  • CacheService (5–60 min TTL per endpoint)           │ │
+│  │  • MD5 hash untuk incremental sync detection          │ │
+│  │  • Admin-only guards (validateAdminSession_)          │ │
+│  └─────────────────┬──────────────────────────────────────┘ │
+└────────────────────┼────────────────────────────────────────┘
+                     │ SpreadsheetApp.openById(DB_ID)
+                     ▼
+┌─────────────────────────────────────────────────────────────┐
+│                    Google Sheets (Database)                  │
+│  ┌──────────────┬──────────────┬──────────────────────────┐ │
+│  │ transactions │ customers    │ packages                 │ │
+│  │ (23 cols)    │ (5 cols)     │ (6 cols)                 │ │
+│  ├──────────────┼──────────────┼──────────────────────────┤ │
+│  │ shifts       │ pengeluaran  │ users (auth)             │ │
+│  │ (15 cols)    │ (7 cols)     │ (5 cols)                 │ │
+│  ├──────────────┼──────────────┼──────────────────────────┤ │
+│  │ sessions     │ perf_logs    │ error_logs               │ │
+│  │ (audit)      │ (optional)   │ (auto-prune 500 rows)    │ │
+│  └──────────────┴──────────────┴──────────────────────────┘ │
+└────────────────────┬────────────────────────────────────────┘
+                     │ dailyBackup() trigger (02:00 WIB)
+                     ▼
+┌─────────────────────────────────────────────────────────────┐
+│            Google Drive (Backup & Recovery)                  │
+│  • Copy entire spreadsheet (7-day retention)                 │
+│  • Naming: DB_backup_YYYY-MM-DD_HHmmss                       │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Data Flow — Contoh: Create Transaction**
+```
+1. Client: form submit → google.script.run.createTransaction(payload)
+2. Server: validateSession → acquire LockService (30s timeout)
+3. Server: validate payload (total recalc, status enum check)
+4. Server: append row ke sheet transactions + log shift_id
+5. Server: invalidate cache (CacheService.remove + MD5 hash reset)
+6. Server: release lock → return success { id, tanggal }
+7. Client: receive callback → update localStorage → refresh card UI
+8. Polling (next 60s): client send hash → server detect change → full sync
+```
+
+---
+
 ## Changelog
 
 ### v2.9 — Incremental Sync & Progressive Bootstrap _(2026-05)_
