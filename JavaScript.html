@@ -996,9 +996,9 @@
                   loadTransactions(true, true);
                   fetchPaket();
                   fetchCustomers(true);
-                  google.script.run.withSuccessHandler(res => {
-                    if (res && res.success) { currentShift = res.data; updateShiftBanner(); }
-                  }).getActiveShiftAPI(currentUser.token);
+                google.script.run.withSuccessHandler(res => {
+                  if (res && res.success) { currentShift = res.data; updateShiftBanner(); enforceShiftGuard(); }
+                }).getActiveShiftAPI(currentUser.token);
                 }
               })
               .withFailureHandler(function(err) {
@@ -1047,6 +1047,7 @@
                 if (bundle.activeShift !== undefined) {
                   currentShift = bundle.activeShift;
                   updateShiftBanner();
+                  enforceShiftGuard();
                 }
               } else {
                 loadSettings();
@@ -1729,8 +1730,8 @@
 
                         <!-- Actions -->
                         <div class="flex gap-1.5 flex-shrink-0">
-                            <button onclick="editCustomer('${escapeHTML(c.id)}', '${namaAman}', '${waAman}')" class="text-slate-400 hover:text-amber-600 bg-slate-50 hover:bg-amber-50 p-2.5 rounded-lg transition-colors border border-slate-100 shadow-sm" title="Edit"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg></button>
-                            <button onclick="deleteCustomerUI('${escapeHTML(c.id)}')" class="text-slate-400 hover:text-red-600 bg-slate-50 hover:bg-red-50 p-2.5 rounded-lg transition-colors border border-slate-100 shadow-sm" title="Hapus"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button>
+                            <button data-shift-required onclick="editCustomer('${escapeHTML(c.id)}', '${namaAman}', '${waAman}')" class="text-slate-400 hover:text-amber-600 bg-slate-50 hover:bg-amber-50 p-2.5 rounded-lg transition-colors border border-slate-100 shadow-sm" title="Edit"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg></button>
+                            <button data-shift-required onclick="deleteCustomerUI('${escapeHTML(c.id)}')" class="text-slate-400 hover:text-red-600 bg-slate-50 hover:bg-red-50 p-2.5 rounded-lg transition-colors border border-slate-100 shadow-sm" title="Hapus"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button>
                         </div>
                     </div>
                 </div>`;
@@ -2489,6 +2490,14 @@
 
 
   function handleStatusChange(transactionId, newStatus, selectElement) {
+    // Kasir needs shift for status updates
+    if (currentUser && currentUser.role !== "admin") {
+      if (!checkActiveShiftBeforeTransaction()) {
+        selectElement.value = selectElement.dataset.originalValue || selectElement.value;
+        return;
+      }
+    }
+    
     let tx = null;
     for (let i = 0; i < allTransactions.length; i++) {
       if (allTransactions[i].id === transactionId) {
@@ -3028,6 +3037,8 @@ Terima kasih.`;
   }
 
   function addToCart() {
+    if (!checkActiveShiftBeforeTransaction()) return;
+    
     const s = document.getElementById("selectPaket");
     const opt = s.options[s.selectedIndex];
     const bInput = document.getElementById("berat");
@@ -4289,8 +4300,8 @@ Terima kasih.`;
                                 <div class="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-500"></div>
                             </label>
 
-                            <button onclick="editPaket('${escapeHTML(p.id)}','${namaAman}','${p.harga}','${safeSat}','${escapeHTML(p.durasi || 0)}','${escapeHTML(p.kategori || "")}','${escapeHTML(p.status || "Aktif")}')" class="text-slate-400 hover:text-amber-600 bg-slate-50 hover:bg-amber-50 p-2.5 rounded-lg transition-colors border border-slate-100 shadow-sm" title="Edit Layanan"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg></button>
-                            <button onclick="deletePaketUI('${escapeHTML(p.id)}')" class="text-slate-400 hover:text-red-600 bg-slate-50 hover:bg-red-50 p-2.5 rounded-lg transition-colors border border-slate-100 shadow-sm" title="Hapus Layanan"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button>
+                            <button data-shift-required onclick="editPaket('${escapeHTML(p.id)}','${namaAman}','${p.harga}','${safeSat}','${escapeHTML(p.durasi || 0)}','${escapeHTML(p.kategori || "")}','${escapeHTML(p.status || "Aktif")}')" class="text-slate-400 hover:text-amber-600 bg-slate-50 hover:bg-amber-50 p-2.5 rounded-lg transition-colors border border-slate-100 shadow-sm" title="Edit Layanan"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg></button>
+                            <button data-shift-required onclick="deletePaketUI('${escapeHTML(p.id)}')" class="text-slate-400 hover:text-red-600 bg-slate-50 hover:bg-red-50 p-2.5 rounded-lg transition-colors border border-slate-100 shadow-sm" title="Hapus Layanan"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button>
                         </div>
                     </div>
                 </div>`;
@@ -5202,6 +5213,8 @@ Terima kasih.`;
       btn.className = "w-full md:w-auto px-6 py-3 rounded-xl font-bold text-sm transition-all active:scale-95 shadow-lg bg-blue-600 text-white hover:bg-blue-700";
       btn.onclick = openOpenShiftModal;
     }
+    
+    enforceShiftGuard();
   }
 
   function openOpenShiftModal() {
@@ -5242,6 +5255,7 @@ Terima kasih.`;
             currentShift = { id: null, waktu_mulai: new Date().toISOString(), modal_awal: parseInt(modalAwal) || 0 };
           }
           updateShiftBanner();
+          enforceShiftGuard();
           // [SCOPE] Refresh Manajemen Kas jika user sedang di section itu
           // — scope berubah dari "none" → "shift" + reset visual pengeluaran
           const sectionKas = document.getElementById("section-kas");
@@ -5291,6 +5305,7 @@ Terima kasih.`;
           closeCloseShiftModal();
           currentShift = null;
           updateShiftBanner();
+          enforceShiftGuard();
 
           // [SCOPE] Refresh Manajemen Kas jika user sedang di section itu —
           // scope berubah dari "shift" → "none", form akan disabled + banner muncul
@@ -5330,6 +5345,49 @@ Terima kasih.`;
       return false;
     }
     return true;
+  }
+
+  // [SHIFT GUARD] Enforce UI disable saat shift belum dibuka (kasir only)
+  function enforceShiftGuard() {
+    const isAdmin = currentUser?.role === "admin";
+    const hasShift = !!currentShift;
+    const locked = !isAdmin && !hasShift;
+    
+    // Transaksi form - full disable
+    toggleFormState("transaksiForm", !locked);
+    
+    // History/Customer/Paket actions - selective disable
+    toggleShiftRequiredElements(locked);
+    
+    // Overlay visibility
+    const overlay = document.getElementById("shiftGuardOverlay");
+    if (overlay) overlay.classList.toggle("hidden", !locked);
+  }
+
+  function toggleFormState(formId, enabled) {
+    const form = document.getElementById(formId);
+    if (!form) return;
+    
+    const controls = form.querySelectorAll("input, select, textarea, button:not([data-always-enabled])");
+    controls.forEach(el => el.disabled = !enabled);
+    
+    form.style.opacity = enabled ? "1" : "0.6";
+    form.style.pointerEvents = enabled ? "auto" : "none";
+  }
+
+  function toggleShiftRequiredElements(locked) {
+    document.querySelectorAll("[data-shift-required]").forEach(el => {
+      el.disabled = locked;
+      if (locked) {
+        el.style.opacity = "0.5";
+        el.style.cursor = "not-allowed";
+        el.title = "Buka shift terlebih dahulu";
+      } else {
+        el.style.opacity = "1";
+        el.style.cursor = "pointer";
+        el.title = "";
+      }
+    });
   }
 
   // [SHIFT] Tampilkan modal rekap setelah shift ditutup

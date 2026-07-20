@@ -1961,7 +1961,23 @@
                   Detail Transaksi Baru
                 </h3>
 
-                <div class="space-y-8">
+                <!-- Shift Guard Overlay -->
+                <div id="shiftGuardOverlay" class="absolute inset-0 bg-slate-900/30 backdrop-blur-sm z-20 hidden flex items-center justify-center p-4 rounded-2xl">
+                  <div class="bg-white p-6 md:p-8 rounded-2xl shadow-2xl text-center max-w-sm animate-fade-in">
+                    <div class="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <svg class="w-8 h-8 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                      </svg>
+                    </div>
+                    <h3 class="text-xl font-black text-slate-900 mb-2">Shift Belum Dibuka</h3>
+                    <p class="text-sm text-slate-600 mb-6 leading-relaxed">Buka shift terlebih dahulu untuk memulai transaksi</p>
+                    <button onclick="openOpenShiftModal()" class="w-full bg-blue-600 hover:bg-blue-700 text-white px-6 py-3.5 rounded-xl font-bold text-sm transition-all active:scale-95 shadow-lg">
+                      Buka Shift Sekarang
+                    </button>
+                  </div>
+                </div>
+
+                <div id="transaksiForm" class="space-y-8">
                   <!-- Group 1: Info Pelanggan -->
                   <div>
                     <h4
@@ -2191,7 +2207,7 @@
                       </div>
                     </div>
                   </div>
-                </div>
+                </div> <!-- end transaksiForm -->
               </div>
             </div>
 
@@ -2723,6 +2739,7 @@
                     </button>
                     <button
                       id="btnSaveCust"
+                      data-shift-required
                       onclick="saveCustomer()"
                       class="flex-[2] bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-4 rounded-xl shadow-lg shadow-emerald-500/20 transition-all active:scale-95 text-sm flex justify-center items-center gap-2"
                     >
@@ -2975,6 +2992,7 @@
                     </button>
                     <button
                       id="btnSavePaket"
+                      data-shift-required
                       onclick="savePaket()"
                       class="flex-[2] bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl shadow-lg shadow-blue-600/20 transition-all active:scale-95 text-sm flex justify-center items-center gap-2"
                     >
