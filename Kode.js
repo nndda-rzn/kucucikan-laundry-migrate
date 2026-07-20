@@ -534,7 +534,6 @@ function login(username, password) {
           sheet.getRange(i + 1, 2).setValue(hashPassword(password));
         }
 
-        cache.remove(attemptKey);
         const token = Utilities.getUuid();
         const sessionData = JSON.stringify({
           username: username,
