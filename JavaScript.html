@@ -30,6 +30,12 @@
   let transactionsHash = null; // [OPT] ETag for incremental sync
   let _sortedTransactions = []; // [OPT] Memoized sorted copy of allTransactions
   let isDashboardBootstrapping = false; // [PERF] Hindari RPC ganda saat initial render
+
+  // [NEW-10] Guard: activity listeners added only once per session
+  let _activityListenersBound = false;
+
+  // [NEW-12] Memoize filterHistory inputs to skip redundant O(n) work
+  let _lastFilterQ = null, _lastFilterStatus = null, _lastFilterDate = null;
   let isTransactionsLoading = false; // [PERF] Cegah refresh transaksi dobel saat modal ditutup
 
   // [PERF-CACHE] DOM element caches — lazily initialized on first use
@@ -164,12 +170,21 @@
   }
 
   // [OPT] Memoize sorted transactions — sort once when allTransactions changes
+  // [NEW-15+16] Pre-compute _tanggalMs, _namaLower, _paketLower, _idLower on each transaction
   function _rebuildSortedTransactions() {
+    for (let i = 0; i < allTransactions.length; i++) {
+      const t = allTransactions[i];
+      const ms = new Date(t.tanggal).getTime();
+      t._tanggalMs = isNaN(ms) ? 0 : ms;
+      t._namaLower  = (t.customer || "").toLowerCase();
+      t._paketLower = (t.paket   || "").toLowerCase();
+      t._idLower    = (t.id      || "").toLowerCase();
+    }
     _sortedTransactions = allTransactions.slice().sort((a, b) => {
-      let da = new Date(a.tanggal).getTime();
-      let db = new Date(b.tanggal).getTime();
-      return (isNaN(db) ? 0 : db) - (isNaN(da) ? 0 : da);
+      return (b._tanggalMs || 0) - (a._tanggalMs || 0);
     });
+    // [NEW-12] Invalidate filterHistory memo on data change
+    _lastFilterQ = null; _lastFilterStatus = null; _lastFilterDate = null;
   }
 
   // [OPT] #14 — Fire 5 independent RPCs in parallel when getDashboardBundle fails.
@@ -1147,11 +1162,14 @@
       let lastUserActivity = Date.now();
       let currentPollingInterval = 30000; // Start with 30s (active)
 
-      // Track user activity
+      // Track user activity — [NEW-10] bind only once per session
       const updateActivity = () => { lastUserActivity = Date.now(); };
-      document.addEventListener("click", updateActivity);
-      document.addEventListener("keypress", updateActivity);
-      document.addEventListener("scroll", updateActivity);
+      if (!_activityListenersBound) {
+        _activityListenersBound = true;
+        document.addEventListener("click", updateActivity);
+        document.addEventListener("keypress", updateActivity);
+        document.addEventListener("scroll", updateActivity);
+      }
 
       const refreshIfRelevant = function () {
         if (document.visibilityState === "hidden") return; // pause saat tab di background
@@ -1334,6 +1352,13 @@
       clearInterval(draftSaveInterval);
       draftSaveInterval = null;
     }
+    // [NEW-11] Clear sessionCheckInterval on logout
+    if (sessionCheckInterval) {
+      clearInterval(sessionCheckInterval);
+      sessionCheckInterval = null;
+    }
+    // [NEW-10] Reset activity listener guard so next login re-binds
+    _activityListenersBound = false;
     const dp = document.getElementById("dashboardPage");
     const lp = document.getElementById("loginPage");
     dp.style.opacity = "0";
@@ -2331,6 +2356,18 @@
     const startDateVal = document.getElementById("filterStartDate").value;
     const endDateVal = document.getElementById("filterEndDate").value;
 
+    // [NEW-12] Skip full rebuild if inputs unchanged and limit not reset
+    const filterDateKey = startDateVal + "|" + endDateVal;
+    if (
+      !resetLimit &&
+      searchInput   === _lastFilterQ &&
+      statusFilter  === _lastFilterStatus &&
+      filterDateKey === _lastFilterDate
+    ) return;
+    _lastFilterQ      = searchInput;
+    _lastFilterStatus = statusFilter;
+    _lastFilterDate   = filterDateKey;
+
     let startDate = null;
     let endDate = null;
     if (startDateVal) {
@@ -2345,20 +2382,21 @@
     const filteredData = [];
     for (let i = 0; i < _sortedTransactions.length; i++) {
       const tr = _sortedTransactions[i];
-      const custName = tr.customer ? tr.customer.toLowerCase() : "";
-      const paketName = tr.paket ? tr.paket.toLowerCase() : "";
+      // [NEW-15+16] Use pre-computed lowercase/ms fields — no per-tick allocation
+      const custName  = tr._namaLower  !== undefined ? tr._namaLower  : (tr.customer || "").toLowerCase();
+      const paketName = tr._paketLower !== undefined ? tr._paketLower : (tr.paket    || "").toLowerCase();
+      const notaId    = tr._idLower    !== undefined ? tr._idLower    : (tr.id       || "").toLowerCase();
       const statusName = tr.status ? tr.status.toLowerCase() : "";
-      const notaId = tr.id ? tr.id.toLowerCase() : "";
 
       // Check Date Range
       let passDateFilter = true;
       if (startDate || endDate) {
-        const trDate = new Date(tr.tanggal);
-        if (isNaN(trDate)) {
+        const trMs = tr._tanggalMs !== undefined ? tr._tanggalMs : new Date(tr.tanggal).getTime();
+        if (isNaN(trMs) || trMs === 0) {
           passDateFilter = false;
         } else {
-          if (startDate && trDate < startDate) passDateFilter = false;
-          if (endDate && trDate > endDate) passDateFilter = false;
+          if (startDate && trMs < startDate.getTime()) passDateFilter = false;
+          if (endDate   && trMs > endDate.getTime())   passDateFilter = false;
         }
       }
 

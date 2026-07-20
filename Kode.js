@@ -144,7 +144,9 @@ function getCacheVersion_(key) {
 function bumpCacheVersion_(key) {
   const value = Date.now() + "_" + Math.floor(Math.random() * 1000000);
   _cacheVersionMem[key] = value;
-  try { PropertiesService.getScriptProperties().setProperty(key, value); } catch (e) {}
+  // [NEW-1] Removed PropertiesService.setProperty() — ~500ms penalty per mutation call.
+  // CacheService (1h TTL) is sufficient for inter-execution invalidation.
+  // PropertiesService is only read on cold-start cache miss in getCacheVersion_().
   try { CacheService.getScriptCache().put(key, value, CACHE_VERSION_TTL); } catch (e) {}
   return value;
 }
@@ -518,8 +520,20 @@ function login(username, password) {
     };
 
   try {
-    const sheet = getSheet("users");
-    const data = sheet.getDataRange().getValues();
+    // [NEW-6] Cache users sheet data (60s TTL) — avoids sheet read on every login attempt.
+    // TTL is short because user records rarely change; security not affected since
+    // the password hash comparison and lockout logic run regardless.
+    const USERS_CACHE_KEY = "users_list";
+    const usersCached = cache.get(USERS_CACHE_KEY);
+    let data;
+    if (usersCached) {
+      try { data = JSON.parse(usersCached); } catch (e) { data = null; }
+    }
+    if (!data) {
+      const sheet = getSheet("users");
+      data = sheet.getDataRange().getValues();
+      try { cache.put(USERS_CACHE_KEY, JSON.stringify(data), 60); } catch (e) {}
+    }
     const lowerUsername = username.toLowerCase();
     for (let i = 1; i < data.length; i++) {
       if (String(data[i][0]).trim().toLowerCase() === lowerUsername) {
@@ -839,6 +853,9 @@ function updateTransactionStatus(token, id, newStatus) {
     for (let i = 0; i < ids.length; i++) {
       if (ids[i][0] === id) {
         sheet.getRange(i + 2, 7).setValue(newStatus);
+        // [NEW-4] Status change affects kas harian totals and report data — invalidate both
+        invalidateKasCache_();
+        invalidateReportCache_();
         return { success: true };
       }
     }
@@ -936,7 +953,17 @@ function deleteTransaction(token, id) {
     const ids = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
     for (let i = 0; i < ids.length; i++) {
       if (ids[i][0] === id) {
+        // [NEW-9] Read shift IDs before deleting so we can invalidate shift summary cache
+        const rowData = sheet.getRange(i + 2, 1, 1, 23).getValues()[0];
+        const trxShiftId = String(rowData[21] || "");
+        const pelunasanShiftId = String(rowData[22] || "");
         sheet.deleteRow(i + 2);
+        // [NEW-3] Invalidate kas + report caches — delete affects kas harian and laporan totals
+        invalidateKasCache_();
+        invalidateReportCache_();
+        // [NEW-9] Invalidate shift summary for affected shifts
+        if (trxShiftId) invalidateShiftSummaryCache_(trxShiftId);
+        if (pelunasanShiftId && pelunasanShiftId !== trxShiftId) invalidateShiftSummaryCache_(pelunasanShiftId);
         return { success: true };
       }
     }
@@ -1337,7 +1364,7 @@ function deletePromosSheet() {
 let _kasSheetSetupDone = false;
 function setupKasSheet_() {
   if (_kasSheetSetupDone) return;
-  const ss = SpreadsheetApp.openById(getDbId_());
+  const ss = getSS(); // [NEW-2] Use cached getSS() instead of openById() — avoids ~200-500ms cold open
   if (!ss.getSheetByName("kas_awal")) {
     const s1 = ss.insertSheet("kas_awal");
     s1.appendRow(["tanggal", "nominal", "kasir"]);
@@ -1745,20 +1772,28 @@ function getKasPeriode(token, startDateStr, endDateStr) {
     
     let totalUangAwal = 0;
     const sheetKas = getSheet("kas_awal");
-    const dataKas = sheetKas.getDataRange().getValues();
-    for (let i = 1; i < dataKas.length; i++) {
+    // [NEW-5] Bounded read — getDataRange() grows unbounded; use lastRow check instead
+    const lastRowKas = sheetKas.getLastRow();
+    const dataKas = lastRowKas > 1
+      ? sheetKas.getRange(2, 1, lastRowKas - 1, 3).getValues()
+      : [];
+    for (let i = 0; i < dataKas.length; i++) {
       const rowDate = new Date(dataKas[i][0]);
       if (isNaN(rowDate)) continue;
       if (startD && rowDate < startD) continue;
       if (endD && rowDate > endD) continue;
       totalUangAwal += parseInt(dataKas[i][1]) || 0;
     }
-    
+
     let totalPengeluaran = 0;
     const sheetPengeluaran = getSheet("pengeluaran");
-    const dataPengeluaran = sheetPengeluaran.getDataRange().getValues();
-    for (let i = 1; i < dataPengeluaran.length; i++) {
-      if(dataPengeluaran[i].join("").trim() === "") continue;
+    // [NEW-5] Bounded read — same pattern as kas_awal above
+    const lastRowPengeluaran = sheetPengeluaran.getLastRow();
+    const dataPengeluaran = lastRowPengeluaran > 1
+      ? sheetPengeluaran.getRange(2, 1, lastRowPengeluaran - 1, 6).getValues()
+      : [];
+    for (let i = 0; i < dataPengeluaran.length; i++) {
+      if (dataPengeluaran[i].join("").trim() === "") continue;
       const rowDate = new Date(dataPengeluaran[i][1]);
       if (isNaN(rowDate)) continue;
       if (startD && rowDate < startD) continue;
