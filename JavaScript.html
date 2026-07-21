@@ -710,8 +710,22 @@
         const sessionData = JSON.parse(saved);
         if (new Date().getTime() > sessionData.expiry)
           throw new Error("Expired");
-        currentUser = sessionData.user;
-        setupDashboard();
+        // [SEC] Validasi token ke server sebelum restore session.
+        // Mencegah bypass lockout — session localStorage tidak bisa dipakai
+        // jika token sudah expire atau user sedang di-lockout di server.
+        google.script.run
+          .withSuccessHandler(function (res) {
+            if (res && res.valid) {
+              currentUser = sessionData.user;
+              setupDashboard();
+            } else {
+              handleLogout();
+            }
+          })
+          .withFailureHandler(function () {
+            handleLogout();
+          })
+          .validateToken(sessionData.user.token);
       } catch (e) {
         handleLogout();
       }

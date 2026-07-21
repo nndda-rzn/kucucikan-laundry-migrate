@@ -589,6 +589,26 @@ function login(username, password) {
   }
 }
 
+// [SEC] Validasi token saat restore session dari localStorage.
+// Mencegah bypass lockout — session lama tidak bisa dipakai jika token sudah expire di server.
+function validateToken(token) {
+  try {
+    if (!token) return { valid: false };
+    const cache = CacheService.getScriptCache();
+    const sessionRaw = cache.get(token);
+    if (!sessionRaw) return { valid: false };
+    const session = JSON.parse(sessionRaw);
+    return {
+      valid: true,
+      role: session.role,
+      nama: session.nama,
+      username: session.username,
+    };
+  } catch (e) {
+    return { valid: false };
+  }
+}
+
 function parseSafeDate(rawDate) {
   if (!rawDate) return new Date().toISOString();
   if (rawDate instanceof Date && !isNaN(rawDate)) return rawDate.toISOString();
