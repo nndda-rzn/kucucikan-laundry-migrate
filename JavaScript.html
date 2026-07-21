@@ -3803,6 +3803,12 @@ Terima kasih.`;
           return;
         }
         let filtered = combined.report || [];
+        // Parse items string → array agar exportToPDF, exportToCSV, dan chart konsisten
+        filtered.forEach(function(row) {
+          if (row.items && typeof row.items === "string") {
+            try { row.items = JSON.parse(row.items); } catch(e) { row.items = []; }
+          }
+        });
         currentReportData = filtered;
 
         // [OPT] Gunakan pre-aggregated data dari server jika tersedia
